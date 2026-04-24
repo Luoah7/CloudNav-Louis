@@ -181,3 +181,11 @@ test('category manager uses pointer drag tracking instead of native html draggin
   assert.equal(categoryManagerSource.includes('draggable'), false);
   assert.equal(categoryManagerSource.includes('dataTransfer'), false);
 });
+
+test('category manager supports batch directory deletion from selected rows', () => {
+  assert.equal(categoryManagerSource.includes('selectedCategoryIds'), true);
+  assert.equal(categoryManagerSource.includes('toggleSelectedCategory'), true);
+  assert.equal(categoryManagerSource.includes('批量删除'), true);
+  assert.equal(categoryManagerSource.includes('batchDeletingCategoryIds'), true);
+  assert.equal(categoryManagerSource.includes('selectedDeleteRootIds'), true);
+});

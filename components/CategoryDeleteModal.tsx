@@ -11,25 +11,35 @@ interface CategoryDeleteModalProps {
   isOpen: boolean;
   category: Category | null;
   categories: Category[];
+  deletingCategoryIds?: string[];
   onClose: () => void;
-  onConfirm: (categoryId: string, options: DeleteCategoryOptions) => void;
+  onConfirm: (categoryId: string, options: DeleteCategoryOptions, deletedCategoryIds?: string[]) => void;
 }
 
 const CategoryDeleteModal: React.FC<CategoryDeleteModalProps> = ({
   isOpen,
   category,
   categories,
+  deletingCategoryIds,
   onClose,
   onConfirm,
 }) => {
   const [mode, setMode] = useState<'move' | 'deleteLinks'>('move');
+  const rootDeletingIds = useMemo(() => (
+    deletingCategoryIds?.length
+      ? deletingCategoryIds
+      : category
+        ? [category.id]
+        : []
+  ), [category, deletingCategoryIds]);
   const deletingIds = useMemo(() => (
-    category ? new Set(getDescendantCategoryIds(categories, category.id)) : new Set<string>()
-  ), [categories, category]);
+    new Set(rootDeletingIds.flatMap(id => getDescendantCategoryIds(categories, id)))
+  ), [categories, rootDeletingIds]);
   const targetOptions = useMemo(() => (
     flattenCategoryTree(categories).filter(({ category: item }) => !deletingIds.has(item.id))
   ), [categories, deletingIds]);
   const [targetId, setTargetId] = useState('common');
+  const isBatchDelete = rootDeletingIds.length > 1;
 
   React.useEffect(() => {
     if (!isOpen) return;
@@ -37,14 +47,15 @@ const CategoryDeleteModal: React.FC<CategoryDeleteModalProps> = ({
     setTargetId(targetOptions[0]?.category.id || 'common');
   }, [isOpen, targetOptions]);
 
-  if (!isOpen || !category) return null;
+  if (!isOpen || rootDeletingIds.length === 0) return null;
 
   const handleConfirm = () => {
+    const rootCategoryId = rootDeletingIds[0];
     if (mode === 'move') {
       if (!targetId) return;
-      onConfirm(category.id, { mode: 'move', targetCategoryId: targetId });
+      onConfirm(rootCategoryId, { mode: 'move', targetCategoryId: targetId }, Array.from(deletingIds));
     } else {
-      onConfirm(category.id, { mode: 'deleteLinks' });
+      onConfirm(rootCategoryId, { mode: 'deleteLinks' }, Array.from(deletingIds));
     }
   };
 
@@ -58,7 +69,11 @@ const CategoryDeleteModal: React.FC<CategoryDeleteModalProps> = ({
             </div>
             <div>
               <h3 className="font-semibold text-slate-900 dark:text-white">删除文件夹</h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400">将删除“{category.name}”及其子文件夹</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {isBatchDelete
+                  ? `将删除 ${rootDeletingIds.length} 个文件夹及其子文件夹`
+                  : `将删除“${category?.name || '所选文件夹'}”及其子文件夹`}
+              </p>
             </div>
           </div>
           <button onClick={onClose} className="rounded p-1 text-slate-400 hover:bg-white/60 dark:hover:bg-slate-700/70">

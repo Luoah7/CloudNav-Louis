@@ -83,6 +83,8 @@ const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [editorState, setEditorState] = useState<CategoryEditorState>({ isOpen: false, mode: 'create' });
   const [deletingCategory, setDeletingCategory] = useState<Category | null>(null);
+  const [batchDeletingCategoryIds, setBatchDeletingCategoryIds] = useState<string[] | null>(null);
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState<Set<string>>(new Set());
   const [pendingDeleteActions, setPendingDeleteActions] = useState<ManagedCategoryDeleteAction[]>([]);
   const [draggedCategoryId, setDraggedCategoryId] = useState<string | null>(null);
   const [dropInstruction, setDropInstruction] = useState<DropInstruction | null>(null);
@@ -93,6 +95,13 @@ const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
   const sourceSnapshot = useMemo(() => serializeCategories(normalizedSourceCategories), [normalizedSourceCategories]);
   const categoryTree = useMemo(() => buildCategoryTree(draftCategories).filter(node => node.id !== 'common'), [draftCategories]);
   const flatCategories = useMemo(() => flattenCategoryTree(draftCategories, { includeCommon: false }), [draftCategories]);
+  const manageableCategoryIds = useMemo<string[]>(() => flatCategories.map(({ category }) => category.id), [flatCategories]);
+  const selectedDeleteRootIds = useMemo<string[]>(() => {
+    const selectedIds = (Array.from(selectedCategoryIds) as string[]).filter(id => manageableCategoryIds.includes(id));
+    return selectedIds.filter(id => !selectedIds.some(otherId => (
+      otherId !== id && getDescendantCategoryIds(draftCategories, otherId).includes(id)
+    )));
+  }, [draftCategories, manageableCategoryIds, selectedCategoryIds]);
   const editorParentOptions = useMemo(() => {
     const excludedIds = new Set<string>(['common']);
     if (editorState.mode === 'edit' && editorState.category) {
@@ -112,12 +121,23 @@ const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
     setExpandedIds(buildExpandedIds(normalized));
     setPendingDeleteActions([]);
     setDeletingCategory(null);
+    setBatchDeletingCategoryIds(null);
+    setSelectedCategoryIds(new Set());
     setEditorState({ isOpen: false, mode: 'create' });
     setDraggedCategoryId(null);
     setDropInstruction(null);
     draggedCategoryIdRef.current = null;
     dropInstructionRef.current = null;
   }, [categories, isOpen]);
+
+  useEffect(() => {
+    setSelectedCategoryIds(prev => {
+      if (prev.size === 0) return prev;
+      const validIds = new Set(manageableCategoryIds);
+      const next = new Set(Array.from(prev).filter(id => validIds.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [manageableCategoryIds]);
 
   if (!isOpen) return null;
 
@@ -191,16 +211,56 @@ const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
     closeEditor();
   };
 
-  const handleConfirmDelete = (categoryId: string, options: DeleteCategoryOptions) => {
-    const deletedCategoryIds = getDescendantCategoryIds(draftCategories, categoryId);
-    const deletedIdSet = new Set(deletedCategoryIds);
+  const applyDeleteCategories = (categoryIds: string[], options: DeleteCategoryOptions) => {
+    const deleteRootIds = categoryIds.filter(Boolean);
+    if (deleteRootIds.length === 0) return;
+
+    const deletedCategoryIds: string[] = Array.from(new Set<string>(
+      deleteRootIds.flatMap(categoryId => getDescendantCategoryIds(draftCategories, categoryId))
+    ));
+    const deletedIdSet = new Set<string>(deletedCategoryIds);
 
     setDraftCategories(prev => normalizeCategories(prev.filter(category => !deletedIdSet.has(category.id))));
+    setSelectedCategoryIds(prev => new Set((Array.from(prev) as string[]).filter(id => !deletedIdSet.has(id))));
     setPendingDeleteActions(prev => {
       const remaining = prev.filter(action => !action.deletedCategoryIds.some(id => deletedIdSet.has(id)));
-      return [...remaining, { categoryId, deletedCategoryIds, options }];
+      return [...remaining, { categoryId: deleteRootIds[0], deletedCategoryIds, options }];
     });
+  };
+
+  const handleConfirmDelete = (categoryId: string, options: DeleteCategoryOptions) => {
+    applyDeleteCategories([categoryId], options);
     setDeletingCategory(null);
+  };
+
+  const handleConfirmBatchDelete = (_categoryId: string, options: DeleteCategoryOptions) => {
+    applyDeleteCategories(batchDeletingCategoryIds || [], options);
+    setBatchDeletingCategoryIds(null);
+  };
+
+  const toggleSelectedCategory = (categoryId: string) => {
+    setSelectedCategoryIds(prev => {
+      const next = new Set(prev);
+      if (next.has(categoryId)) {
+        next.delete(categoryId);
+      } else {
+        next.add(categoryId);
+      }
+      return next;
+    });
+  };
+
+  const toggleSelectAllCategories = () => {
+    setSelectedCategoryIds(prev => {
+      if (manageableCategoryIds.length > 0 && manageableCategoryIds.every(id => prev.has(id))) {
+        return new Set();
+      }
+      return new Set(manageableCategoryIds);
+    });
+  };
+
+  const clearSelectedCategories = () => {
+    setSelectedCategoryIds(new Set());
   };
 
   const createOrderedChildrenMap = (sourceCategories: Category[]) => {
@@ -391,6 +451,7 @@ const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
       const hasChildren = node.children.length > 0;
       const isExpanded = expandedIds.has(node.id);
       const isDragging = draggedCategoryId === node.id;
+      const isSelected = selectedCategoryIds.has(node.id);
       const isDropTarget = dropInstruction?.targetId === node.id;
       const showDropBefore = isDropTarget && dropInstruction?.position === 'before';
       const showDropAfter = isDropTarget && dropInstruction?.position === 'after';
@@ -403,6 +464,8 @@ const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
             className={`relative rounded-xl border transition-colors ${
               isDragging
                 ? 'border-blue-400 bg-blue-50/80 opacity-70 dark:border-blue-500/40 dark:bg-blue-500/10'
+                : isSelected
+                  ? 'border-blue-300 bg-blue-50/70 dark:border-blue-500/30 dark:bg-blue-500/10'
                 : 'liquid-section'
             } ${showDropInside ? 'border-blue-500 ring-2 ring-blue-500/20' : ''}`}
             style={{ marginLeft: depth * 16 }}
@@ -424,6 +487,15 @@ const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
               >
                 <ChevronRight size={14} className={isExpanded ? 'rotate-90' : ''} />
               </button>
+
+              <input
+                type="checkbox"
+                checked={isSelected}
+                onChange={() => toggleSelectedCategory(node.id)}
+                onClick={(event) => event.stopPropagation()}
+                className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                aria-label={`选择目录 ${node.name}`}
+              />
 
               <button
                 type="button"
@@ -539,6 +611,41 @@ const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
               按住左侧拖拽点移动目录；移到条目上边缘或下边缘调整同级顺序，移到中间可作为子目录。
             </div>
 
+            {selectedCategoryIds.size > 0 && (
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-200/80 bg-blue-50/75 px-4 py-3 text-sm dark:border-blue-500/20 dark:bg-blue-500/10">
+                <div className="flex items-center gap-3 text-slate-600 dark:text-slate-300">
+                  <label className="flex cursor-pointer items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={manageableCategoryIds.length > 0 && manageableCategoryIds.every(id => selectedCategoryIds.has(id))}
+                      onChange={toggleSelectAllCategories}
+                      className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    全选
+                  </label>
+                  <span>已选择 {selectedCategoryIds.size} 项</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setBatchDeletingCategoryIds(selectedDeleteRootIds)}
+                    disabled={selectedDeleteRootIds.length === 0}
+                    className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:text-red-400 dark:hover:bg-red-900/20"
+                  >
+                    <Trash2 size={14} />
+                    批量删除
+                  </button>
+                  <button
+                    type="button"
+                    onClick={clearSelectedCategories}
+                    className="rounded-lg px-3 py-1.5 text-sm text-slate-500 transition-colors hover:bg-white/70 dark:text-slate-300 dark:hover:bg-white/10"
+                  >
+                    取消选择
+                  </button>
+                </div>
+              </div>
+            )}
+
             {categoryTree.length === 0 ? (
               <div className="rounded-xl border border-dashed border-slate-200 px-4 py-10 text-center text-sm text-slate-400 dark:border-white/10">
                 还没有可管理的目录
@@ -596,6 +703,15 @@ const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
         categories={draftCategories}
         onClose={() => setDeletingCategory(null)}
         onConfirm={handleConfirmDelete}
+      />
+
+      <CategoryDeleteModal
+        isOpen={!!batchDeletingCategoryIds}
+        category={null}
+        categories={draftCategories}
+        deletingCategoryIds={batchDeletingCategoryIds || undefined}
+        onClose={() => setBatchDeletingCategoryIds(null)}
+        onConfirm={handleConfirmBatchDelete}
       />
     </>
   );
