@@ -28,14 +28,14 @@ const CategoryAuthModal: React.FC<CategoryAuthModalProps> = ({ isOpen, onClose, 
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden border border-slate-200 dark:border-slate-700 p-6 relative">
-        <button onClick={onClose} className="absolute top-4 right-4 p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full">
+    <div className="liquid-overlay fixed inset-0 z-[60] flex items-center justify-center p-4">
+      <div className="liquid-panel w-full max-w-sm overflow-hidden rounded-2xl p-6 relative">
+        <button onClick={onClose} className="absolute top-4 right-4 p-1 hover:bg-white/60 dark:hover:bg-slate-700/70 rounded-full">
             <X size={20} className="text-slate-400" />
         </button>
 
         <div className="flex flex-col items-center mb-6">
-          <div className="w-14 h-14 bg-amber-100 dark:bg-amber-900/30 rounded-full flex items-center justify-center mb-4 text-amber-600 dark:text-amber-400">
+          <div className="liquid-section w-14 h-14 rounded-full flex items-center justify-center mb-4 text-amber-600 dark:text-amber-400">
             <Lock size={28} />
           </div>
           <h2 className="text-lg font-bold dark:text-white">解锁 "{category.name}"</h2>
@@ -50,7 +50,7 @@ const CategoryAuthModal: React.FC<CategoryAuthModalProps> = ({ isOpen, onClose, 
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white focus:ring-2 focus:ring-amber-500 outline-none transition-all text-center tracking-widest"
+              className="liquid-input w-full p-3 rounded-xl dark:text-white outline-none transition-all text-center tracking-widest"
               placeholder="目录密码"
               autoFocus
             />

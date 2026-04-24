@@ -125,13 +125,13 @@ const BackupModal: React.FC<BackupModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden border border-slate-200 dark:border-slate-700 max-h-[90vh] flex flex-col">
-        <div className="flex justify-between items-center p-4 border-b border-slate-200 dark:border-slate-700">
+    <div className="liquid-overlay fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="liquid-panel w-full max-w-2xl overflow-hidden rounded-2xl max-h-[90vh] flex flex-col">
+        <div className="flex justify-between items-center p-5 border-b liquid-divider">
           <h3 className="text-lg font-semibold dark:text-white flex items-center gap-2">
             <Cloud className="text-blue-500" /> 备份与恢复
           </h3>
-          <button onClick={onClose} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-colors">
+          <button onClick={onClose} className="p-1 hover:bg-white/60 dark:hover:bg-slate-700/70 rounded-full transition-colors">
             <X className="w-5 h-5 dark:text-slate-400" />
           </button>
         </div>
@@ -139,7 +139,7 @@ const BackupModal: React.FC<BackupModalProps> = ({
         <div className="flex-1 overflow-y-auto p-6 space-y-8">
             
             {/* Section 1: WebDAV Configuration */}
-            <section className="space-y-4">
+            <section className="liquid-section space-y-4 rounded-2xl p-4">
                 <div className="flex items-center justify-between">
                     <h4 className="font-medium text-slate-800 dark:text-slate-200">WebDAV 设置 (坚果云/<a href="https://infini-cloud.net/en/modules/mypage/usage/" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-600 underline">InfiniCloud</a>等)</h4>
                     <label className="flex items-center gap-2 cursor-pointer">
@@ -161,7 +161,7 @@ const BackupModal: React.FC<BackupModalProps> = ({
                             value={config.url}
                             onChange={(e) => setConfig({...config, url: e.target.value})}
                             placeholder="https://dav.jianguoyun.com/dav/"
-                            className="w-full p-2 text-sm rounded-lg border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
+                            className="liquid-input w-full p-2 text-sm rounded-lg dark:text-white outline-none"
                         />
                     </div>
                     <div className="grid grid-cols-2 gap-4">
@@ -171,7 +171,7 @@ const BackupModal: React.FC<BackupModalProps> = ({
                                 type="text" 
                                 value={config.username}
                                 onChange={(e) => setConfig({...config, username: e.target.value})}
-                                className="w-full p-2 text-sm rounded-lg border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
+                                className="liquid-input w-full p-2 text-sm rounded-lg dark:text-white outline-none"
                             />
                         </div>
                         <div>
@@ -180,7 +180,7 @@ const BackupModal: React.FC<BackupModalProps> = ({
                                 type="password" 
                                 value={config.password}
                                 onChange={(e) => setConfig({...config, password: e.target.value})}
-                                className="w-full p-2 text-sm rounded-lg border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
+                                className="liquid-input w-full p-2 text-sm rounded-lg dark:text-white outline-none"
                             />
                         </div>
                     </div>
@@ -189,7 +189,7 @@ const BackupModal: React.FC<BackupModalProps> = ({
                         <button 
                             onClick={handleTestConnection}
                             disabled={isTesting}
-                            className="px-3 py-1.5 text-xs font-medium bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-md transition-colors"
+                            className="px-3 py-1.5 text-xs font-medium bg-white/55 dark:bg-slate-700/70 hover:bg-white/80 dark:hover:bg-slate-600 rounded-md transition-colors"
                         >
                             {isTesting ? '连接中...' : '测试连接'}
                         </button>
@@ -205,16 +205,16 @@ const BackupModal: React.FC<BackupModalProps> = ({
                 </div>
             </section>
 
-            <hr className="border-slate-200 dark:border-slate-700" />
+            <hr className="liquid-divider" />
 
             {/* Section 2: Sync Actions */}
-            <section className="space-y-4">
+            <section className="liquid-section space-y-4 rounded-2xl p-4">
                 <h4 className="font-medium text-slate-800 dark:text-slate-200">云端同步操作</h4>
                 <div className="grid grid-cols-3 gap-4">
                     <button 
                         onClick={handleBackupToCloud}
                         disabled={!config.enabled}
-                        className="flex flex-col items-center justify-center p-4 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed group"
+                        className="flex flex-col items-center justify-center p-4 rounded-xl border border-slate-200/90 dark:border-slate-600/40 bg-white/55 dark:bg-slate-900/20 hover:bg-white/80 dark:hover:bg-slate-700/45 transition-all disabled:opacity-50 disabled:cursor-not-allowed group"
                     >
                         <Upload className="w-8 h-8 text-blue-500 mb-2 group-hover:-translate-y-1 transition-transform" />
                         <span className="text-sm font-medium dark:text-white">上传备份</span>
@@ -224,7 +224,7 @@ const BackupModal: React.FC<BackupModalProps> = ({
                     <button 
                         onClick={handleRestoreFromCloud}
                         disabled={!config.enabled}
-                        className="flex flex-col items-center justify-center p-4 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed group"
+                        className="flex flex-col items-center justify-center p-4 rounded-xl border border-slate-200/90 dark:border-slate-600/40 bg-white/55 dark:bg-slate-900/20 hover:bg-white/80 dark:hover:bg-slate-700/45 transition-all disabled:opacity-50 disabled:cursor-not-allowed group"
                     >
                         <Download className="w-8 h-8 text-purple-500 mb-2 group-hover:-translate-y-1 transition-transform" />
                         <span className="text-sm font-medium dark:text-white">从 WebDAV 恢复</span>
@@ -234,7 +234,7 @@ const BackupModal: React.FC<BackupModalProps> = ({
                     <button 
                         onClick={handleBackupToCloudWithTimestamp}
                         disabled={!config.enabled}
-                        className="flex flex-col items-center justify-center p-4 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed group"
+                        className="flex flex-col items-center justify-center p-4 rounded-xl border border-slate-200/90 dark:border-slate-600/40 bg-white/55 dark:bg-slate-900/20 hover:bg-white/80 dark:hover:bg-slate-700/45 transition-all disabled:opacity-50 disabled:cursor-not-allowed group"
                     >
                         <Upload className="w-8 h-8 text-green-500 mb-2 group-hover:-translate-y-1 transition-transform" />
                         <span className="text-sm font-medium dark:text-white">双重备份</span>
@@ -253,32 +253,32 @@ const BackupModal: React.FC<BackupModalProps> = ({
                 )}
             </section>
 
-            <hr className="border-slate-200 dark:border-slate-700" />
+            <hr className="liquid-divider" />
 
              {/* Section 3: HTML Export */}
-             <section className="space-y-4">
+             <section className="liquid-section space-y-4 rounded-2xl p-4">
                 <h4 className="font-medium text-slate-800 dark:text-slate-200">本地导出</h4>
-                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-700/30 flex items-center justify-between">
+                <div className="p-4 rounded-xl bg-white/40 dark:bg-slate-900/20 flex items-center justify-between border border-white/50 dark:border-slate-600/30">
                     <div>
                         <h5 className="text-sm font-medium dark:text-slate-200">导出 HTML 书签文件</h5>
                         <p className="text-xs text-slate-500 mt-1">兼容 Chrome, Edge, Firefox 导入格式，保留目录结构</p>
                     </div>
                     <button 
                         onClick={handleExportHtml}
-                        className="px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 hover:border-blue-500 text-slate-700 dark:text-slate-200 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+                        className="px-4 py-2 bg-white/75 dark:bg-slate-800/70 border border-slate-200/90 dark:border-slate-600 hover:border-blue-500 text-slate-700 dark:text-slate-200 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
                     >
                         <Download size={16} /> 导出 HTML
                     </button>
                 </div>
                 
-                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-700/30 flex items-center justify-between">
+                <div className="p-4 rounded-xl bg-white/40 dark:bg-slate-900/20 flex items-center justify-between border border-white/50 dark:border-slate-600/30">
                     <div>
                         <h5 className="text-sm font-medium dark:text-slate-200">导出 cloudnav_backup.json 文件</h5>
                         <p className="text-xs text-slate-500 mt-1">与 WebDAV 备份格式一致，便于数据迁移</p>
                     </div>
                     <button 
                         onClick={handleExportJson}
-                        className="px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 hover:border-blue-500 text-slate-700 dark:text-slate-200 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+                        className="px-4 py-2 bg-white/75 dark:bg-slate-800/70 border border-slate-200/90 dark:border-slate-600 hover:border-blue-500 text-slate-700 dark:text-slate-200 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
                     >
                         <Download size={16} /> 导出 JSON
                     </button>

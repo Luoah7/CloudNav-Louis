@@ -30,12 +30,12 @@ const QRCodeModal: React.FC<QRCodeModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-xl max-w-sm w-full mx-4 p-6 relative">
+    <div className="liquid-overlay fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="liquid-panel max-w-sm w-full overflow-hidden rounded-2xl p-6 relative">
         {/* 关闭按钮 */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+          className="absolute top-4 right-4 p-1 text-slate-400 hover:bg-white/60 hover:text-slate-600 dark:hover:bg-slate-700/70 dark:hover:text-slate-300 rounded-full transition-colors"
         >
           <X size={20} />
         </button>
@@ -46,7 +46,7 @@ const QRCodeModal: React.FC<QRCodeModalProps> = ({
         </h3>
 
         {/* 网站信息 */}
-        <div className="text-center mb-4">
+        <div className="liquid-section text-center mb-4 rounded-xl p-3">
           <h4 className="font-medium text-slate-800 dark:text-slate-200 truncate" title={title}>
             {title}
           </h4>
@@ -56,11 +56,11 @@ const QRCodeModal: React.FC<QRCodeModalProps> = ({
         </div>
 
         {/* QR码 */}
-        <div className="flex justify-center mb-4">
+        <div className="flex justify-center mb-4 rounded-2xl bg-white/50 p-4 dark:bg-slate-900/30">
           <img
             src={generateQRCode()}
             alt={`${title}的二维码`}
-            className="w-48 h-48 border-4 border-white dark:border-slate-700 rounded-lg"
+            className="w-48 h-48 rounded-lg border-4 border-white dark:border-slate-700"
           />
         </div>
 
@@ -75,7 +75,7 @@ const QRCodeModal: React.FC<QRCodeModalProps> = ({
           </button>
           <button
             onClick={onClose}
-            className="flex-1 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-200 px-4 py-2 rounded-lg transition-colors"
+            className="flex-1 bg-white/55 dark:bg-slate-700/70 hover:bg-white/80 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-200 px-4 py-2 rounded-lg transition-colors"
           >
             关闭
           </button>

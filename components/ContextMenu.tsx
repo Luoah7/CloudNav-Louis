@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Copy, QrCode, Edit2, Trash2, Pin } from 'lucide-react';
+import { Copy, QrCode, Edit2, Trash2 } from 'lucide-react';
 
 interface ContextMenuProps {
   isOpen: boolean;
@@ -9,7 +9,6 @@ interface ContextMenuProps {
   onShowQRCode: () => void;
   onEditLink: () => void;
   onDeleteLink: () => void;
-  onTogglePin: () => void;
 }
 
 const ContextMenu: React.FC<ContextMenuProps> = ({
@@ -20,7 +19,6 @@ const ContextMenu: React.FC<ContextMenuProps> = ({
   onShowQRCode,
   onEditLink,
   onDeleteLink,
-  onTogglePin
 }) => {
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -64,14 +62,13 @@ const ContextMenu: React.FC<ContextMenuProps> = ({
     { icon: Copy, label: '复制链接', onClick: onCopyLink },
     { icon: QrCode, label: '显示二维码', onClick: onShowQRCode },
     { icon: Edit2, label: '编辑链接', onClick: onEditLink },
-    { icon: Pin, label: '置顶/取消置顶', onClick: onTogglePin },
     { icon: Trash2, label: '删除链接', onClick: onDeleteLink, className: 'text-red-600 dark:text-red-400' }
   ];
 
   return (
     <div
       ref={menuRef}
-      className="fixed z-50 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg py-1 min-w-[160px]"
+      className="liquid-menu fixed z-50 rounded-xl py-1 min-w-[160px]"
       style={{
         left: adjustedPosition.x,
         top: adjustedPosition.y

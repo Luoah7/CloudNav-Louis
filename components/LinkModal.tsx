@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { X, Sparkles, Loader2, Pin, Wand2, Trash2 } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { X, Sparkles, Loader2, Wand2, Trash2 } from 'lucide-react';
 import { LinkItem, Category, AIConfig } from '../types';
 import { generateLinkDescription, suggestCategory } from '../services/geminiService';
+import { flattenCategoryTree, normalizeCategories } from '../services/categoryTree';
 
 interface LinkModalProps {
   isOpen: boolean;
@@ -19,13 +20,13 @@ const LinkModal: React.FC<LinkModalProps> = ({ isOpen, onClose, onSave, onDelete
   const [url, setUrl] = useState('');
   const [description, setDescription] = useState('');
   const [categoryId, setCategoryId] = useState(categories[0]?.id || 'common');
-  const [pinned, setPinned] = useState(false);
   const [icon, setIcon] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [isFetchingIcon, setIsFetchingIcon] = useState(false);
   const [autoFetchIcon, setAutoFetchIcon] = useState(true);
   const [batchMode, setBatchMode] = useState(false);
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
+  const flatCategories = useMemo(() => flattenCategoryTree(normalizeCategories(categories)), [categories]);
   
   // 当模态框关闭时，重置批量模式为默认关闭状态
   useEffect(() => {
@@ -52,7 +53,6 @@ const LinkModal: React.FC<LinkModalProps> = ({ isOpen, onClose, onSave, onDelete
         setUrl(initialData.url);
         setDescription(initialData.description || '');
         setCategoryId(initialData.categoryId);
-        setPinned(initialData.pinned || false);
         setIcon(initialData.icon || '');
       } else {
         setTitle('');
@@ -61,7 +61,6 @@ const LinkModal: React.FC<LinkModalProps> = ({ isOpen, onClose, onSave, onDelete
         // 如果有默认分类ID且该分类存在，则使用默认分类，否则使用第一个分类
         const defaultCategory = defaultCategoryId && categories.find(cat => cat.id === defaultCategoryId);
         setCategoryId(defaultCategory ? defaultCategoryId : (categories[0]?.id || 'common'));
-        setPinned(false);
         setIcon('');
       }
     }
@@ -135,7 +134,6 @@ const LinkModal: React.FC<LinkModalProps> = ({ isOpen, onClose, onSave, onDelete
       icon,
       description,
       categoryId,
-      pinned
     });
     
     // 如果有自定义图标URL，缓存到KV空间
@@ -151,7 +149,6 @@ const LinkModal: React.FC<LinkModalProps> = ({ isOpen, onClose, onSave, onDelete
       setUrl('');
       setIcon('');
       setDescription('');
-      setPinned(false);
       // 如果开启自动获取图标，尝试获取新图标
       if (autoFetchIcon && finalUrl) {
         handleFetchIcon();
@@ -254,28 +251,15 @@ const LinkModal: React.FC<LinkModalProps> = ({ isOpen, onClose, onSave, onDelete
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200 dark:border-slate-700">
-        <div className="flex justify-between items-center p-4 border-b border-slate-200 dark:border-slate-700">
+    <div className="liquid-overlay fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="liquid-panel w-full max-w-md overflow-hidden rounded-2xl max-h-[90vh] flex flex-col">
+        <div className="flex justify-between items-center p-5 border-b liquid-divider">
           <div className="flex items-center gap-2">
             <h3 className="text-lg font-semibold dark:text-white">
               {initialData ? '编辑链接' : '添加新链接'}
             </h3>
-            <button
-              type="button"
-              onClick={() => setPinned(!pinned)}
-              className={`flex items-center gap-1 px-2 py-1 rounded-md border transition-all ${
-                pinned 
-                ? 'bg-blue-100 border-blue-200 text-blue-600 dark:bg-blue-900/40 dark:border-blue-800 dark:text-blue-300' 
-                : 'bg-slate-50 border-slate-200 text-slate-500 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-400'
-              }`}
-              title={pinned ? "取消置顶" : "置顶"}
-            >
-              <Pin size={14} className={pinned ? "fill-current" : ""} />
-              <span className="text-xs font-medium">置顶</span>
-            </button>
             {!initialData && (
-              <div className="flex items-center gap-1 px-2 py-1 rounded-md border bg-slate-50 border-slate-200 dark:bg-slate-700 dark:border-slate-600">
+              <div className="liquid-section flex items-center gap-1 px-2 py-1 rounded-md">
                 <input
                   type="checkbox"
                   id="batchMode"
@@ -302,12 +286,12 @@ const LinkModal: React.FC<LinkModalProps> = ({ isOpen, onClose, onSave, onDelete
               </button>
             )}
           </div>
-          <button onClick={onClose} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-colors">
+          <button onClick={onClose} className="p-1 hover:bg-white/60 dark:hover:bg-slate-700/70 rounded-full transition-colors">
             <X className="w-5 h-5 dark:text-slate-400" />
           </button>
         </div>
 
-        <form onSubmit={handleSave} className="p-4 space-y-4">
+        <form onSubmit={handleSave} className="p-5 space-y-4 overflow-y-auto">
           <div>
             <label className="block text-sm font-medium mb-1 dark:text-slate-300">标题</label>
             <input
@@ -315,7 +299,7 @@ const LinkModal: React.FC<LinkModalProps> = ({ isOpen, onClose, onSave, onDelete
               required
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="w-full p-2 rounded-lg border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+              className="liquid-input w-full p-2 rounded-lg dark:text-white outline-none transition-all"
               placeholder="网站名称"
             />
           </div>
@@ -328,7 +312,7 @@ const LinkModal: React.FC<LinkModalProps> = ({ isOpen, onClose, onSave, onDelete
                 required
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
-                className="w-full p-2 rounded-lg border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                className="liquid-input w-full p-2 rounded-lg dark:text-white outline-none transition-all"
                 placeholder="example.com 或 https://..."
                 />
             </div>
@@ -338,7 +322,7 @@ const LinkModal: React.FC<LinkModalProps> = ({ isOpen, onClose, onSave, onDelete
             <label className="block text-sm font-medium mb-1 dark:text-slate-300">图标 URL</label>
             <div className="flex gap-2">
               {icon && (
-                <div className="w-10 h-10 rounded-lg border border-slate-300 dark:border-slate-600 overflow-hidden flex-shrink-0 bg-white dark:bg-slate-700">
+                <div className="liquid-section w-10 h-10 rounded-lg overflow-hidden flex-shrink-0 bg-white/50 dark:bg-slate-900/30">
                   <img
                     src={icon}
                     alt="图标预览"
@@ -353,7 +337,7 @@ const LinkModal: React.FC<LinkModalProps> = ({ isOpen, onClose, onSave, onDelete
                 type="url"
                 value={icon}
                 onChange={(e) => setIcon(e.target.value)}
-                className="flex-1 p-2 rounded-lg border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                className="liquid-input flex-1 p-2 rounded-lg dark:text-white outline-none transition-all"
                 placeholder="https://example.com/icon.png"
               />
               <button
@@ -402,7 +386,7 @@ const LinkModal: React.FC<LinkModalProps> = ({ isOpen, onClose, onSave, onDelete
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="w-full p-2 rounded-lg border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none transition-all h-20 resize-none"
+              className="liquid-input w-full p-2 rounded-lg dark:text-white outline-none transition-all h-20 resize-none"
               placeholder="简短描述..."
             />
           </div>
@@ -412,10 +396,10 @@ const LinkModal: React.FC<LinkModalProps> = ({ isOpen, onClose, onSave, onDelete
             <select
             value={categoryId}
             onChange={(e) => setCategoryId(e.target.value)}
-            className="w-full p-2 rounded-lg border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+            className="liquid-input w-full p-2 rounded-lg dark:text-white outline-none transition-all"
             >
-            {categories.map(cat => (
-                <option key={cat.id} value={cat.id}>{cat.name}</option>
+            {flatCategories.map(({ category, path }) => (
+                <option key={category.id} value={category.id}>{path}</option>
             ))}
             </select>
           </div>

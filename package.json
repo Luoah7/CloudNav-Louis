@@ -1,10 +1,10 @@
 {
-  "name": "cloudnav-(云航)",
+  "name": "cloudnav",
   "private": true,
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "node scripts/dev-server.mjs",
     "build": "vite build",
     "preview": "vite preview"
   },

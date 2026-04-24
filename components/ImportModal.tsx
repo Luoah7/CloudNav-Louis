@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { X, Upload, FileText, ArrowRight, Check, AlertCircle, FolderInput, ListTree, Database } from 'lucide-react';
 import { Category, LinkItem, SearchConfig, AIConfig } from '../types';
 import { parseBookmarks } from '../services/bookmarkParser';
+import { flattenCategoryTree, getCategoryPath, normalizeCategories } from '../services/categoryTree';
 
 interface ImportModalProps {
   isOpen: boolean;
@@ -41,6 +42,7 @@ const ImportModal: React.FC<ImportModalProps> = ({
   const [importMode, setImportMode] = useState<'original' | 'merge'>('original');
   const [targetCategoryId, setTargetCategoryId] = useState<string>(categories[0]?.id || 'common');
   const [importType, setImportType] = useState<'html' | 'json'>('html');
+  const flatCategories = flattenCategoryTree(normalizeCategories(categories));
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const jsonFileInputRef = useRef<HTMLInputElement>(null);
@@ -115,12 +117,12 @@ const ImportModal: React.FC<ImportModalProps> = ({
             }
         });
 
-        // 3. Category Diff
-        const existingCategoryNames = new Set(categories.map(c => c.name));
-        const uniqueNewCategories = result.categories.filter(c => !existingCategoryNames.has(c.name));
+        // 3. Category Diff by full path so same-name folders under different parents stay distinct.
+        const existingCategoryPaths = new Set(categories.map(c => getCategoryPath(categories, c.id)));
+        const uniqueNewCategories = result.categories.filter(c => !existingCategoryPaths.has(getCategoryPath(result.categories, c.id)));
 
         setParsedLinks(uniqueNewLinks);
-        setParsedCategories(uniqueNewCategories);
+        setParsedCategories(result.categories);
         setParsedSearchConfig(result.searchConfig || null);
         setParsedAIConfig(result.aiConfig || null);
         setNewLinksCount(uniqueNewLinks.length);
@@ -152,35 +154,36 @@ const ImportModal: React.FC<ImportModalProps> = ({
           // In merge mode, we do NOT add new categories from the file
           finalCategories = []; 
       } else {
-          // Keep structure mode
-          // We need to merge categories carefully.
-          // Since parseBookmarks generates IDs for categories, if a category name already exists in `categories`, 
-          // we should remap the links to the existing category ID instead of creating a new duplicate-named category.
-          
-          const nameToIdMap = new Map<string, string>();
-          categories.forEach(c => nameToIdMap.set(c.name, c.id));
+          // Keep structure mode and merge by full path, not by display name.
+          const pathToIdMap = new Map<string, string>();
+          categories.forEach(c => pathToIdMap.set(getCategoryPath(categories, c.id), c.id));
+          const importedIdMap = new Map<string, string>();
 
           // Valid new categories to add
           const categoriesToAdd: Category[] = [];
 
           parsedCategories.forEach(pc => {
-              if (nameToIdMap.has(pc.name)) {
-                  // Category exists, we don't add it.
-                  // But we need to know its ID to remap links.
+              const importedPath = getCategoryPath(parsedCategories, pc.id);
+              const existingId = pathToIdMap.get(importedPath);
+
+              if (existingId) {
+                  importedIdMap.set(pc.id, existingId);
               } else {
-                  categoriesToAdd.push(pc);
-                  nameToIdMap.set(pc.name, pc.id); // Add new one to map
+                  const remappedCategory: Category = {
+                    ...pc,
+                    parentId: pc.parentId ? importedIdMap.get(pc.parentId) : undefined
+                  };
+                  categoriesToAdd.push(remappedCategory);
+                  importedIdMap.set(pc.id, remappedCategory.id);
+                  pathToIdMap.set(importedPath, remappedCategory.id);
               }
           });
 
           // Remap links
           finalLinks = finalLinks.map(link => {
-             // Find the name of the category this link was assigned to in the parser
-             const originalCat = parsedCategories.find(c => c.id === link.categoryId) 
-                                 || categories.find(c => c.id === link.categoryId); // Fallback
-             
-             if (originalCat && nameToIdMap.has(originalCat.name)) {
-                 return { ...link, categoryId: nameToIdMap.get(originalCat.name)! };
+             const remappedCategoryId = importedIdMap.get(link.categoryId);
+             if (remappedCategoryId) {
+                 return { ...link, categoryId: remappedCategoryId };
              }
              // If for some reason we can't find the map, put it in common
              return { ...link, categoryId: 'common' };
@@ -205,15 +208,15 @@ const ImportModal: React.FC<ImportModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-lg overflow-hidden border border-slate-200 dark:border-slate-700">
+    <div className="liquid-overlay fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="liquid-panel w-full max-w-lg overflow-hidden rounded-2xl">
         
         {/* Header */}
-        <div className="flex justify-between items-center p-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
+        <div className="flex justify-between items-center p-5 border-b liquid-divider">
           <h3 className="text-lg font-semibold dark:text-white flex items-center gap-2">
             <Upload size={20} className="text-blue-500"/> 导入书签
           </h3>
-          <button onClick={handleClose} className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full transition-colors">
+          <button onClick={handleClose} className="p-1 hover:bg-white/60 dark:hover:bg-slate-700/70 rounded-full transition-colors">
             <X className="w-5 h-5 dark:text-slate-400" />
           </button>
         </div>
@@ -224,7 +227,7 @@ const ImportModal: React.FC<ImportModalProps> = ({
             {step === 'upload' && (
                 <div className="space-y-4">
                     {/* HTML Import Option */}
-                    <div className="flex flex-col items-center justify-center space-y-4 py-8 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                    <div className="liquid-section flex flex-col items-center justify-center space-y-4 py-8 border-2 border-dashed border-slate-200/90 dark:border-slate-600/50 rounded-2xl hover:bg-white/65 dark:hover:bg-slate-700/45 transition-colors cursor-pointer"
                          onClick={() => fileInputRef.current?.click()}>
                         <input 
                             type="file" 
@@ -253,7 +256,7 @@ const ImportModal: React.FC<ImportModalProps> = ({
                     </div>
                     
                     {/* JSON Import Option */}
-                    <div className="flex flex-col items-center justify-center space-y-4 py-8 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                    <div className="liquid-section flex flex-col items-center justify-center space-y-4 py-8 border-2 border-dashed border-slate-200/90 dark:border-slate-600/50 rounded-2xl hover:bg-white/65 dark:hover:bg-slate-700/45 transition-colors cursor-pointer"
                          onClick={() => jsonFileInputRef.current?.click()}>
                         <input 
                             type="file" 
@@ -291,7 +294,7 @@ const ImportModal: React.FC<ImportModalProps> = ({
                             <div className="text-xl font-bold text-green-600 dark:text-green-400">{newLinksCount}</div>
                             <div className="text-xs text-green-700 dark:text-green-500">新增链接</div>
                         </div>
-                        <div className="p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg text-center border border-slate-200 dark:border-slate-600">
+                        <div className="liquid-section p-3 rounded-lg text-center">
                             <div className="text-xl font-bold text-slate-600 dark:text-slate-400">{duplicateCount}</div>
                             <div className="text-xs text-slate-500">重复跳过</div>
                         </div>
@@ -332,10 +335,10 @@ const ImportModal: React.FC<ImportModalProps> = ({
                                             onChange={(e) => setTargetCategoryId(e.target.value)}
                                             disabled={importMode !== 'merge'}
                                             onClick={(e) => e.stopPropagation()}
-                                            className="w-full text-sm p-2 rounded border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white outline-none"
+                                            className="liquid-input w-full text-sm p-2 rounded-lg dark:text-white outline-none"
                                         >
-                                            {categories.map(c => (
-                                                <option key={c.id} value={c.id}>{c.name}</option>
+                                            {flatCategories.map(({ category, path }) => (
+                                                <option key={category.id} value={category.id}>{path}</option>
                                             ))}
                                         </select>
                                     </div>
@@ -348,12 +351,12 @@ const ImportModal: React.FC<ImportModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-slate-200 dark:border-slate-700 flex justify-end gap-3 bg-slate-50 dark:bg-slate-800/50">
+        <div className="p-4 border-t liquid-divider flex justify-end gap-3">
             {step === 'upload' ? (
-                <button onClick={handleClose} className="px-4 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors">取消</button>
+                <button onClick={handleClose} className="px-4 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-white/65 dark:hover:bg-slate-700/70 rounded-lg transition-colors">取消</button>
             ) : (
                 <>
-                    <button onClick={resetState} className="px-4 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors">重新选择</button>
+                    <button onClick={resetState} className="px-4 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-white/65 dark:hover:bg-slate-700/70 rounded-lg transition-colors">重新选择</button>
                     <button 
                         onClick={executeImport} 
                         disabled={newLinksCount === 0}

@@ -1,19 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { X, Plus, Trash2, Edit2, Check, Globe, Search, ExternalLink, RotateCcw } from 'lucide-react';
-import { ExternalSearchSource, SearchMode } from '../types';
+import { X, Plus, Trash2, Check, CheckCircle2, Globe, Search, ExternalLink, RotateCcw, Star } from 'lucide-react';
+import { ExternalSearchSource } from '../types';
+import { createDefaultSearchSources, resolveDefaultSearchSource } from '../services/searchBehavior';
 
 interface SearchConfigModalProps {
   isOpen: boolean;
   onClose: () => void;
   sources: ExternalSearchSource[];
-  onSave: (sources: ExternalSearchSource[]) => void;
+  defaultSourceId?: string;
+  onSave: (sources: ExternalSearchSource[], defaultSourceId?: string) => void;
 }
 
 const SearchConfigModal: React.FC<SearchConfigModalProps> = ({ 
-  isOpen, onClose, sources, onSave 
+  isOpen, onClose, sources, defaultSourceId, onSave 
 }) => {
   const [localSources, setLocalSources] = useState<ExternalSearchSource[]>(sources);
-  const [isEditing, setIsEditing] = useState<string | null>(null);
+  const [localDefaultSourceId, setLocalDefaultSourceId] = useState<string>('');
   const [newSource, setNewSource] = useState<Partial<ExternalSearchSource>>({
     name: '',
     url: '',
@@ -25,8 +27,9 @@ const SearchConfigModal: React.FC<SearchConfigModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       setLocalSources(sources);
+      setLocalDefaultSourceId(resolveDefaultSearchSource(sources, defaultSourceId)?.id || '');
     }
-  }, [sources, isOpen]);
+  }, [sources, defaultSourceId, isOpen]);
 
   const handleAddSource = () => {
     if (!newSource.name || !newSource.url) return;
@@ -40,123 +43,43 @@ const SearchConfigModal: React.FC<SearchConfigModalProps> = ({
       createdAt: Date.now()
     };
     
-    setLocalSources([...localSources, source]);
+    const nextSources = [...localSources, source];
+    setLocalSources(nextSources);
+    if (!resolveDefaultSearchSource(nextSources, localDefaultSourceId)) {
+      setLocalDefaultSourceId(source.id);
+    }
     setNewSource({ name: '', url: '', icon: 'Globe', enabled: true });
   };
 
-  const handleEditSource = (id: string) => {
-    setIsEditing(id);
-  };
-
-  const handleSaveEdit = (id: string) => {
-    setIsEditing(null);
-  };
-
   const handleDeleteSource = (id: string) => {
-    setLocalSources(localSources.filter(source => source.id !== id));
+    const nextSources = localSources.filter(source => source.id !== id);
+    setLocalSources(nextSources);
+    setLocalDefaultSourceId(resolveDefaultSearchSource(nextSources, localDefaultSourceId === id ? undefined : localDefaultSourceId)?.id || '');
   };
 
   const handleToggleEnabled = (id: string) => {
-    setLocalSources(localSources.map(source => 
+    const nextSources = localSources.map(source =>
       source.id === id ? { ...source, enabled: !source.enabled } : source
-    ));
+    );
+    setLocalSources(nextSources);
+    setLocalDefaultSourceId(resolveDefaultSearchSource(nextSources, localDefaultSourceId)?.id || '');
   };
 
   const handleSave = () => {
-    onSave(localSources);
+    const resolvedDefault = resolveDefaultSearchSource(localSources, localDefaultSourceId);
+    onSave(localSources, resolvedDefault?.id);
     onClose();
   };
 
   const handleReset = () => {
-    const defaultSources: ExternalSearchSource[] = [
-      {
-        id: 'bing',
-        name: '必应',
-        url: 'https://www.bing.com/search?q={query}',
-        icon: 'Search',
-        enabled: true,
-        createdAt: Date.now()
-      },  
-      {
-        id: 'google',
-        name: 'Google',
-        url: 'https://www.google.com/search?q={query}',
-        icon: 'Search',
-        enabled: true,
-        createdAt: Date.now()
-      },
-      {
-        id: 'baidu',
-        name: '百度',
-        url: 'https://www.baidu.com/s?wd={query}',
-        icon: 'Globe',
-        enabled: true,
-        createdAt: Date.now()
-      },
-      {
-        id: 'sogou',
-        name: '搜狗',
-        url: 'https://www.sogou.com/web?query={query}',
-        icon: 'Globe',
-        enabled: true,
-        createdAt: Date.now()
-      },
-      {
-        id: 'yandex',
-        name: 'Yandex',
-        url: 'https://yandex.com/search/?text={query}',
-        icon: 'Globe',
-        enabled: true,
-        createdAt: Date.now()
-      },
-      {
-        id: 'github',
-        name: 'GitHub',
-        url: 'https://github.com/search?q={query}',
-        icon: 'Github',
-        enabled: true,
-        createdAt: Date.now()
-      },
-      {
-        id: 'linuxdo',
-        name: 'Linux.do',
-        url: 'https://linux.do/search?q={query}',
-        icon: 'Terminal',
-        enabled: true,
-        createdAt: Date.now()
-      },
-      {
-        id: 'bilibili',
-        name: 'B站',
-        url: 'https://search.bilibili.com/all?keyword={query}',
-        icon: 'Play',
-        enabled: true,
-        createdAt: Date.now()
-      },
-      {
-        id: 'youtube',
-        name: 'YouTube',
-        url: 'https://www.youtube.com/results?search_query={query}',
-        icon: 'Video',
-        enabled: true,
-        createdAt: Date.now()
-      },
-      {
-        id: 'wikipedia',
-        name: '维基',
-        url: 'https://zh.wikipedia.org/wiki/Special:Search?search={query}',
-        icon: 'BookOpen',
-        enabled: true,
-        createdAt: Date.now()
-      }
-    ];
-    
+    const defaultSources = createDefaultSearchSources();
     setLocalSources(defaultSources);
+    setLocalDefaultSourceId(defaultSources[0]?.id || '');
   };
 
   const handleCancel = () => {
     setLocalSources(sources);
-    setIsEditing(null);
+    setLocalDefaultSourceId(resolveDefaultSearchSource(sources, defaultSourceId)?.id || '');
     setNewSource({ name: '', url: '', icon: 'Globe', enabled: true });
     onClose();
   };
@@ -164,16 +87,16 @@ const SearchConfigModal: React.FC<SearchConfigModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden border border-slate-200 dark:border-slate-700 flex flex-col max-h-[90vh]">
+    <div className="liquid-overlay fixed inset-0 z-[60] flex items-center justify-center p-4">
+      <div className="liquid-panel w-full max-w-2xl overflow-hidden rounded-2xl flex flex-col max-h-[90vh]">
         
         {/* Header */}
-        <div className="flex justify-between items-center p-4 border-b border-slate-200 dark:border-slate-700 shrink-0">
+        <div className="flex justify-between items-center p-5 border-b liquid-divider shrink-0">
           <div className="flex items-center gap-2">
             <Search size={20} className="text-blue-500" />
             <h2 className="text-lg font-semibold dark:text-white">搜索源管理</h2>
           </div>
-          <button onClick={handleCancel} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-colors">
+          <button onClick={handleCancel} className="p-1 hover:bg-white/60 dark:hover:bg-slate-700/70 rounded-full transition-colors">
             <X className="w-5 h-5 dark:text-slate-400" />
           </button>
         </div>
@@ -182,7 +105,7 @@ const SearchConfigModal: React.FC<SearchConfigModalProps> = ({
         <div className="p-6 space-y-6 overflow-y-auto">
           
           {/* 添加新搜索源 */}
-          <div className="bg-slate-50 dark:bg-slate-700/50 p-4 rounded-lg">
+          <div className="liquid-section p-4 rounded-2xl">
             <h3 className="text-sm font-medium dark:text-white mb-3">添加新搜索源</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
@@ -192,7 +115,7 @@ const SearchConfigModal: React.FC<SearchConfigModalProps> = ({
                   value={newSource.name || ''}
                   onChange={(e) => setNewSource({ ...newSource, name: e.target.value })}
                   placeholder="例如：Google"
-                  className="w-full p-2 text-sm rounded-lg border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
+                  className="liquid-input w-full p-2 text-sm rounded-lg dark:text-white outline-none"
                 />
               </div>
               <div>
@@ -202,7 +125,7 @@ const SearchConfigModal: React.FC<SearchConfigModalProps> = ({
                   value={newSource.url || ''}
                   onChange={(e) => setNewSource({ ...newSource, url: e.target.value })}
                   placeholder="例如：https://www.google.com/search?q={query}"
-                  className="w-full p-2 text-sm rounded-lg border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
+                  className="liquid-input w-full p-2 text-sm rounded-lg dark:text-white outline-none"
                 />
               </div>
             </div>
@@ -231,7 +154,7 @@ const SearchConfigModal: React.FC<SearchConfigModalProps> = ({
                 </div>
               ) : (
                 localSources.map((source) => (
-                  <div key={source.id} className="flex items-center justify-between p-3 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg">
+                  <div key={source.id} className="liquid-section flex items-center justify-between p-3 rounded-xl">
                     <div className="flex items-center gap-3 flex-1">
                       <div className="flex items-center gap-2">
                         <input
@@ -245,6 +168,12 @@ const SearchConfigModal: React.FC<SearchConfigModalProps> = ({
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <span className="font-medium text-sm dark:text-white truncate">{source.name}</span>
+                          {source.id === localDefaultSourceId && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-600 dark:bg-blue-900/30 dark:text-blue-300">
+                              <CheckCircle2 size={12} />
+                              默认
+                            </span>
+                          )}
                           {source.enabled && (
                             <span className="px-1.5 py-0.5 text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-full">
                               启用
@@ -257,6 +186,19 @@ const SearchConfigModal: React.FC<SearchConfigModalProps> = ({
                       </div>
                     </div>
                     <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => source.enabled && setLocalDefaultSourceId(source.id)}
+                        disabled={!source.enabled || source.id === localDefaultSourceId}
+                        className={`flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors ${
+                          source.id === localDefaultSourceId
+                            ? 'cursor-default bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-300'
+                            : 'text-slate-500 hover:bg-blue-50 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-40 dark:text-slate-400 dark:hover:bg-blue-900/20 dark:hover:text-blue-300'
+                        }`}
+                        title={source.enabled ? '设为默认搜索源' : '启用后可设为默认'}
+                      >
+                        <Star size={14} className={source.id === localDefaultSourceId ? 'fill-current' : ''} />
+                        {source.id === localDefaultSourceId ? '默认' : '设为默认'}
+                      </button>
                       <button
                         onClick={() => handleDeleteSource(source.id)}
                         className="p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
@@ -272,7 +214,7 @@ const SearchConfigModal: React.FC<SearchConfigModalProps> = ({
           </div>
 
           {/* 使用说明 */}
-          <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
+          <div className="rounded-2xl border border-blue-200/70 bg-blue-50/60 p-4 dark:border-blue-800/50 dark:bg-blue-900/20">
             <h4 className="text-sm font-medium text-blue-800 dark:text-blue-300 mb-2 flex items-center gap-1">
               <ExternalLink size={14} /> 使用说明
             </h4>
@@ -285,7 +227,7 @@ const SearchConfigModal: React.FC<SearchConfigModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-slate-200 dark:border-slate-700 shrink-0">
+        <div className="p-4 border-t liquid-divider shrink-0">
           <div className="flex justify-between items-center">
             <button
               onClick={handleReset}
@@ -296,7 +238,7 @@ const SearchConfigModal: React.FC<SearchConfigModalProps> = ({
             <div className="flex justify-end gap-2">
               <button
                 onClick={handleCancel}
-                className="px-4 py-2 text-sm bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600 rounded-lg transition-colors"
+                className="px-4 py-2 text-sm bg-white/55 dark:bg-slate-700/70 text-slate-700 dark:text-slate-300 hover:bg-white/80 dark:hover:bg-slate-600 rounded-lg transition-colors"
               >
                 取消
               </button>

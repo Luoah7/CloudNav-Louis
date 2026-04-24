@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="https://lucide.dev/favicon.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>云航 CloudNav</title>
+    <title>CloudNav</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
@@ -12,18 +12,166 @@
         theme: {
           extend: {
             colors: {
-              primary: '#3b82f6',
-              secondary: '#64748b',
-              dark: '#0f172a',
-              card: '#1e293b',
+              primary: {
+                50: '#eff6ff',
+                100: '#dbeafe',
+                200: '#bfdbfe',
+                300: '#93c5fd',
+                400: '#60a5fa',
+                500: '#3b82f6',
+                600: '#2563eb',
+                700: '#1d4ed8',
+                800: '#1e40af',
+                900: '#1e3a8a',
+                950: '#172554',
+              },
+              dark: {
+                bg: '#0a0a0a',
+                panel: '#121212',
+                surface: '#1a1a1a',
+                border: '#27272a'
+              }
+            },
+            fontFamily: {
+              sans: ['Inter', 'SF Pro Display', 'PingFang SC', '-apple-system', 'sans-serif'],
+            },
+            boxShadow: {
+              'glass': '0 8px 32px 0 rgba(31, 38, 135, 0.07)',
+              'glass-dark': '0 8px 32px 0 rgba(0, 0, 0, 0.4)',
+              'hover': '0 12px 40px -10px rgba(0,0,0,0.08)',
+              'hover-dark': '0 12px 40px -10px rgba(0,0,0,0.5)'
             }
           }
         }
       }
     </script>
     <style>
+      html, body, button, input, textarea, select {
+        font-family: "SF Pro Text", "SF Pro Display", "PingFang SC", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+      }
       body {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        font-feature-settings: "tnum";
+        background-color: #fafafa;
+        background-image: radial-gradient(at 0% 0%, hsla(210,100%,96%,1) 0px, transparent 50%),
+                          radial-gradient(at 100% 0%, hsla(280,100%,97%,1) 0px, transparent 50%);
+        background-attachment: fixed;
+      }
+      .dark body {
+        background-color: #050505;
+        background-image: radial-gradient(at 0% 0%, hsla(210,100%,10%,1) 0px, transparent 50%),
+                          radial-gradient(at 100% 0%, hsla(280,50%,10%,1) 0px, transparent 50%);
+        background-attachment: fixed;
+        color: #e5e5e5;
+      }
+      .liquid-overlay {
+        background: rgba(248, 250, 252, 0.78);
+        backdrop-filter: blur(18px) saturate(150%);
+        -webkit-backdrop-filter: blur(18px) saturate(150%);
+      }
+      .dark .liquid-overlay {
+        background: rgba(30, 30, 30, 0.74);
+      }
+      .liquid-panel {
+        background: rgba(255, 255, 255, 0.85);
+        border: 1px solid rgba(226, 232, 240, 0.6);
+        box-shadow: 0 24px 70px rgba(15, 23, 42, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+        backdrop-filter: blur(24px) saturate(150%);
+        -webkit-backdrop-filter: blur(24px) saturate(150%);
+        border-radius: 20px;
+      }
+      .dark .liquid-panel {
+        background: rgba(18, 18, 18, 0.7);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.02);
+        backdrop-filter: blur(24px) saturate(150%);
+        -webkit-backdrop-filter: blur(24px) saturate(150%);
+        border-radius: 20px;
+      }
+      .liquid-panel h2,
+      .liquid-panel h3 {
+        font-size: 15px !important;
+        line-height: 1.4;
+        font-weight: 600;
+        letter-spacing: 0;
+      }
+      .liquid-panel h4,
+      .liquid-panel h5,
+      .liquid-panel label {
+        font-size: 13px !important;
+        line-height: 1.45;
+        font-weight: 500;
+        letter-spacing: 0;
+      }
+      .liquid-panel p,
+      .liquid-panel li {
+        font-size: 12px;
+        line-height: 1.5;
+        letter-spacing: 0;
+      }
+      .liquid-panel input,
+      .liquid-panel textarea,
+      .liquid-panel select,
+      .liquid-panel button {
+        font-size: 13px;
+        letter-spacing: 0;
+      }
+      .liquid-surface {
+        background: rgba(255, 255, 255, 0.6);
+        border: 1px solid rgba(226, 232, 240, 0.8);
+        box-shadow: 0 4px 20px rgba(15, 23, 42, 0.02), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+        backdrop-filter: blur(20px) saturate(160%);
+        -webkit-backdrop-filter: blur(20px) saturate(160%);
+        border-radius: 16px;
+      }
+      .dark .liquid-surface {
+        background: rgba(26, 26, 26, 0.5);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.02);
+        backdrop-filter: blur(20px) saturate(160%);
+        -webkit-backdrop-filter: blur(20px) saturate(160%);
+        border-radius: 16px;
+      }
+      .liquid-section {
+        background: #f8fafc;
+        border: 1px solid rgba(226, 232, 240, 0.9);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.58);
+      }
+      .dark .liquid-section {
+        background: #252526;
+        border-color: #3c3c3c;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+      }
+      .liquid-input {
+        background: #fff;
+        border: 1px solid rgba(203, 213, 225, 0.95);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.56);
+      }
+      .dark .liquid-input {
+        background: #3c3c3c;
+        border-color: #4c4c4c;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+      }
+      .liquid-input:focus {
+        border-color: rgba(59, 130, 246, 0.72);
+        box-shadow:
+          0 0 0 3px rgba(59, 130, 246, 0.14),
+          inset 0 1px 0 rgba(255, 255, 255, 0.62);
+      }
+      .liquid-menu {
+        background: #fff;
+        border: 1px solid rgba(203, 213, 225, 0.96);
+        box-shadow: 0 18px 48px rgba(15, 23, 42, 0.16);
+      }
+      .dark .liquid-menu {
+        background: #252526;
+        border-color: #454545;
+        box-shadow: 0 22px 56px rgba(0, 0, 0, 0.4);
+      }
+      .liquid-divider {
+        border-color: rgba(226, 232, 240, 0.62);
+      }
+      .dark .liquid-divider {
+        border-color: rgba(69, 69, 69, 0.92);
       }
       /* Custom scrollbar for sidebar */
       .scrollbar-hide::-webkit-scrollbar {
@@ -54,7 +202,7 @@
 </script>
 <link rel="stylesheet" href="/index.css">
 </head>
-  <body class="bg-gray-50 dark:bg-slate-900 text-slate-900 dark:text-slate-50 transition-colors duration-300">
+  <body class="text-slate-900 dark:text-slate-50 transition-colors duration-300">
     <div id="root"></div>
   <script type="module" src="/index.tsx"></script>
 </body>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Save, Bot, Key, Globe, Sparkles, PauseCircle, Wrench, Box, Copy, Check, LayoutTemplate, RefreshCw, Info, Download, Sidebar, Keyboard, MousePointerClick, AlertTriangle, Package, Zap, Menu } from 'lucide-react';
+import { X, Save, Bot, Key, Globe, Sparkles, PauseCircle, Wrench, Box, Copy, Check, LayoutTemplate, Info, Download, Sidebar, Keyboard, MousePointerClick, AlertTriangle, Package, Zap, Menu } from 'lucide-react';
 import { AIConfig, LinkItem, Category, SiteSettings } from '../types';
 import { generateLinkDescription } from '../services/geminiService';
 import JSZip from 'jszip';
@@ -16,47 +16,6 @@ interface SettingsModalProps {
   authToken: string | null;
 }
 
-const getRandomColor = () => {
-    const h = Math.floor(Math.random() * 360);
-    const s = 70 + Math.random() * 20;
-    const l = 45 + Math.random() * 15;
-    return `hsl(${h}, ${s}%, ${l}%)`;
-};
-
-const generateSvgIcon = (text: string, color1: string, color2: string) => {
-    let char = '';
-    if (text && text.length > 0) {
-        char = text.charAt(0);
-        if (/^[a-zA-Z]$/.test(char)) {
-            char = '云';
-        }
-    } else {
-        char = '云';
-    }
-    
-    const gradientId = 'g_' + Math.random().toString(36).substr(2, 9);
-
-    const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-        <defs>
-            <linearGradient id="${gradientId}" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0%" stop-color="${color1}"/>
-                <stop offset="100%" stop-color="${color2}"/>
-            </linearGradient>
-        </defs>
-        <rect width="100%" height="100%" fill="url(#${gradientId})" rx="16"/>
-        <text x="50%" y="50%" dy=".35em" fill="white" font-family="Arial, sans-serif" font-weight="bold" font-size="32" text-anchor="middle">${char}</text>
-    </svg>`.trim();
-
-    try {
-        const encoded = window.btoa(unescape(encodeURIComponent(svg)));
-        return `data:image/svg+xml;base64,${encoded}`;
-    } catch (e) {
-        console.error("SVG Icon Generation Failed", e);
-        return '';
-    }
-};
-
 const SettingsModal: React.FC<SettingsModalProps> = ({ 
     isOpen, onClose, config, siteSettings, onSave, links, categories, onUpdateLinks, authToken 
 }) => {
@@ -64,14 +23,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   const [localConfig, setLocalConfig] = useState<AIConfig>(config);
   
   const [localSiteSettings, setLocalSiteSettings] = useState<SiteSettings>(() => ({
-      title: siteSettings?.title || 'CloudNav - 我的导航',
+      title: siteSettings?.title || 'CloudNav',
       navTitle: siteSettings?.navTitle || 'CloudNav',
       favicon: siteSettings?.favicon || '',
       cardStyle: siteSettings?.cardStyle || 'detailed',
       passwordExpiryDays: siteSettings?.passwordExpiryDays ?? 7
   }));
-  
-  const [generatedIcons, setGeneratedIcons] = useState<string[]>([]);
   
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0 });
@@ -84,30 +41,17 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   
   const [copiedStates, setCopiedStates] = useState<{[key: string]: boolean}>({});
 
-  const updateGeneratedIcons = (text: string) => {
-      const newIcons: string[] = [];
-      for (let i = 0; i < 6; i++) {
-          const c1 = getRandomColor();
-          const h2 = (parseInt(c1.split(',')[0].split('(')[1]) + 30 + Math.random() * 30) % 360;
-          const c2 = `hsl(${h2}, 70%, 50%)`;
-          newIcons.push(generateSvgIcon(text, c1, c2));
-      }
-      setGeneratedIcons(newIcons);
-  };
-
   useEffect(() => {
     if (isOpen) {
       setLocalConfig(config);
       const safeSettings = {
-          title: siteSettings?.title || 'CloudNav - 我的导航',
+          title: siteSettings?.title || 'CloudNav',
           navTitle: siteSettings?.navTitle || 'CloudNav',
           favicon: siteSettings?.favicon || '',
-          cardStyle: siteSettings?.cardStyle || 'detailed'
+          cardStyle: siteSettings?.cardStyle || 'detailed',
+          passwordExpiryDays: siteSettings?.passwordExpiryDays ?? 7
       };
       setLocalSiteSettings(safeSettings);
-      if (generatedIcons.length === 0) {
-          updateGeneratedIcons(safeSettings.navTitle);
-      }
 
       setIsProcessing(false);
       setIsZipping(false);
@@ -688,8 +632,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 });`;
 
   const renderCodeBlock = (filename: string, code: string) => (
-    <div className="rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden shrink-0">
-        <div className="flex justify-between items-center bg-slate-50 dark:bg-slate-700/50 px-3 py-2 border-b border-slate-200 dark:border-slate-700">
+    <div className="liquid-section rounded-xl overflow-hidden shrink-0">
+        <div className="flex justify-between items-center bg-white/35 dark:bg-slate-900/20 px-3 py-2 border-b liquid-divider">
             <span className="text-xs font-mono font-medium text-slate-600 dark:text-slate-300">{filename}</span>
             <div className="flex items-center gap-2">
                 <button 
@@ -812,10 +756,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden border border-slate-200 dark:border-slate-700 flex max-h-[90vh] flex-col md:flex-row">
+    <div className="liquid-overlay fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="liquid-panel w-full max-w-4xl overflow-hidden rounded-2xl flex max-h-[90vh] flex-col md:flex-row">
         
-        <div className="w-full md:w-48 bg-slate-50 dark:bg-slate-800/50 border-r border-slate-200 dark:border-slate-700 flex flex-row md:flex-col p-2 gap-1 overflow-x-auto shrink-0">
+        <div className="w-full md:w-48 liquid-surface border-r flex flex-row md:flex-col p-2 gap-1 overflow-x-auto shrink-0">
             {tabs.map(tab => (
                 <button
                     key={tab.id}
@@ -823,7 +767,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
                         activeTab === tab.id 
                         ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' 
-                        : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+                        : 'text-slate-600 dark:text-slate-400 hover:bg-white/55 dark:hover:bg-slate-700/60'
                     }`}
                 >
                     <tab.icon size={18} />
@@ -832,10 +776,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             ))}
         </div>
 
-        <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden bg-white dark:bg-slate-800">
-             <div className="flex justify-between items-center p-4 border-b border-slate-200 dark:border-slate-700 shrink-0">
+        <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden bg-transparent">
+             <div className="flex justify-between items-center p-5 border-b liquid-divider shrink-0">
                 <h3 className="text-lg font-semibold dark:text-white">设置</h3>
-                <button onClick={onClose} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-colors">
+                <button onClick={onClose} className="p-1 hover:bg-white/60 dark:hover:bg-slate-700/70 rounded-full transition-colors">
                     <X className="w-5 h-5 dark:text-slate-400" />
                 </button>
             </div>
@@ -844,14 +788,14 @@ document.addEventListener('DOMContentLoaded', async () => {
                 
                 {activeTab === 'site' && (
                     <div className="space-y-6 animate-in fade-in duration-300">
-                        <div className="space-y-4">
+                        <div className="liquid-section space-y-4 rounded-2xl p-4">
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">网页标题 (Title)</label>
                                 <input 
                                     type="text" 
                                     value={localSiteSettings.title}
                                     onChange={(e) => handleSiteChange('title', e.target.value)}
-                                    className="w-full p-2 rounded-lg border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
+                                    className="liquid-input w-full p-2 rounded-lg dark:text-white outline-none"
                                 />
                             </div>
                             <div>
@@ -860,13 +804,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                                     type="text" 
                                     value={localSiteSettings.navTitle}
                                     onChange={(e) => handleSiteChange('navTitle', e.target.value)}
-                                    className="w-full p-2 rounded-lg border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
+                                    className="liquid-input w-full p-2 rounded-lg dark:text-white outline-none"
                                 />
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">网站图标 (Favicon URL)</label>
                                 <div className="flex gap-3 items-center">
-                                    <div className="w-10 h-10 rounded-lg bg-slate-100 dark:bg-slate-700 flex items-center justify-center overflow-hidden border border-slate-200 dark:border-slate-600">
+                                    <div className="liquid-section w-10 h-10 rounded-lg flex items-center justify-center overflow-hidden">
                                         {localSiteSettings.favicon ? <img src={localSiteSettings.favicon} className="w-full h-full object-cover"/> : <Globe size={20} className="text-slate-400"/>}
                                     </div>
                                     <input 
@@ -874,31 +818,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                                         value={localSiteSettings.favicon}
                                         onChange={(e) => handleSiteChange('favicon', e.target.value)}
                                         placeholder="https://example.com/favicon.ico"
-                                        className="flex-1 p-2 rounded-lg border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
+                                        className="liquid-input flex-1 p-2 rounded-lg dark:text-white outline-none"
                                     />
-                                </div>
-                                <div className="mt-3">
-                                    <div className="flex items-center justify-between mb-2">
-                                        <p className="text-xs text-slate-500">选择生成的随机图标 (点击右侧按钮刷新):</p>
-                                        <button 
-                                            type="button"
-                                            onClick={() => updateGeneratedIcons(localSiteSettings.navTitle)}
-                                            className="text-xs flex items-center gap-1 text-blue-600 hover:bg-blue-50 dark:hover:bg-slate-700 px-2 py-1 rounded transition-colors"
-                                        >
-                                            <RefreshCw size={12} /> 随机生成
-                                        </button>
-                                    </div>
-                                    <div className="flex gap-2">
-                                        {generatedIcons.map((icon, idx) => (
-                                            <button 
-                                                key={idx}
-                                                onClick={() => handleSiteChange('favicon', icon)}
-                                                className="w-8 h-8 rounded hover:ring-2 ring-blue-500 transition-all border border-slate-100 dark:border-slate-600"
-                                            >
-                                                <img src={icon} className="w-full h-full rounded" />
-                                            </button>
-                                        ))}
-                                    </div>
                                 </div>
                             </div>
                             <div>
@@ -909,7 +830,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                                         min="0"
                                         value={localSiteSettings.passwordExpiryDays}
                                         onChange={(e) => handleSiteChange('passwordExpiryDays', parseInt(e.target.value) || 0)}
-                                        className="w-full p-2 rounded-lg border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
+                                        className="liquid-input w-full p-2 rounded-lg dark:text-white outline-none"
                                     />
                                 </div>
                                 <p className="text-xs text-slate-500 mt-1">设置为 0 表示永久不退出，默认 7 天后自动退出</p>
@@ -919,13 +840,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 )}
 
                 {activeTab === 'ai' && (
-                    <div className="space-y-6 animate-in fade-in duration-300">
+                    <div className="liquid-section space-y-6 rounded-2xl p-4 animate-in fade-in duration-300">
                         <div>
                             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">AI 提供商</label>
                             <select 
                                 value={localConfig.provider}
                                 onChange={(e) => handleChange('provider', e.target.value)}
-                                className="w-full p-2 rounded-lg border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
+                                className="liquid-input w-full p-2 rounded-lg dark:text-white outline-none"
                             >
                                 <option value="gemini">Google Gemini</option>
                                 <option value="openai">OpenAI Compatible (ChatGPT, DeepSeek, Claude...)</option>
@@ -941,7 +862,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                                     value={localConfig.apiKey}
                                     onChange={(e) => handleChange('apiKey', e.target.value)}
                                     placeholder="sk-..."
-                                    className="w-full pl-10 p-2 rounded-lg border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                                    className="liquid-input w-full pl-10 p-2 rounded-lg dark:text-white outline-none font-mono"
                                 />
                             </div>
                             <p className="text-xs text-slate-500 mt-1">Key 仅存储在本地浏览器缓存中，不会发送到我们的服务器。</p>
@@ -955,7 +876,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                                     value={localConfig.baseUrl}
                                     onChange={(e) => handleChange('baseUrl', e.target.value)}
                                     placeholder="https://api.openai.com/v1"
-                                    className="w-full p-2 rounded-lg border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
+                                    className="liquid-input w-full p-2 rounded-lg dark:text-white outline-none"
                                 />
                             </div>
                         )}
@@ -967,11 +888,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 value={localConfig.model}
                                 onChange={(e) => handleChange('model', e.target.value)}
                                 placeholder={localConfig.provider === 'gemini' ? "gemini-2.5-flash" : "gpt-3.5-turbo"}
-                                className="w-full p-2 rounded-lg border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
+                                className="liquid-input w-full p-2 rounded-lg dark:text-white outline-none"
                             />
                         </div>
 
-                        <div className="pt-4 border-t border-slate-100 dark:border-slate-700">
+                        <div className="pt-4 border-t liquid-divider">
                             <h4 className="text-sm font-semibold mb-2 dark:text-slate-200">批量操作</h4>
                             {isProcessing ? (
                                 <div className="space-y-2">
@@ -1002,10 +923,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                         
                         <div className="space-y-3">
                             <h4 className="font-medium text-slate-800 dark:text-slate-200 flex items-center gap-2">
-                                <span className="flex items-center justify-center w-6 h-                                -6 rounded-full bg-blue-100 text-blue-600 text-xs font-bold">1</span>
+                                <span className="flex items-center justify-center w-6 h-6 rounded-full bg-blue-100 text-blue-600 text-xs font-bold">1</span>
                                 输入访问密码
                             </h4>
-                            <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl border border-slate-200 dark:border-slate-700">
+                            <div className="liquid-section p-4 rounded-2xl">
                                 <div className="space-y-3">
                                      <div>
                                         <label className="text-xs text-slate-500 mb-1 block">API 域名 (自动获取)</label>
@@ -1020,10 +941,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                                                 type="text" 
                                                 value={password} 
                                                 readOnly 
-                                                className="flex-1 p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded text-sm outline-none font-mono"
+                                                className="liquid-input flex-1 p-2 rounded text-sm outline-none font-mono"
                                                 placeholder="未登录 / 未设置"
                                             />
-                                             <button onClick={() => handleCopy(password, 'pwd')} className="px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 hover:border-blue-500 rounded text-slate-600 dark:text-slate-400 transition-colors">
+                                             <button onClick={() => handleCopy(password, 'pwd')} className="px-3 py-2 bg-white/75 dark:bg-slate-800/70 border border-slate-200/90 dark:border-slate-600 hover:border-blue-500 rounded text-slate-600 dark:text-slate-400 transition-colors">
                                                 {copiedStates['pwd'] ? <Check size={16}/> : <Copy size={16}/>}
                                             </button>
                                         </div>
@@ -1041,13 +962,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                             <div className="grid grid-cols-2 gap-4">
                                 <button 
                                     onClick={() => setBrowserType('chrome')}
-                                    className={`p-4 rounded-xl border-2 transition-all flex flex-col items-center gap-2 ${browserType === 'chrome' ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300' : 'border-slate-200 dark:border-slate-700 hover:border-blue-300 bg-white dark:bg-slate-800'}`}
+                                    className={`p-4 rounded-xl border-2 transition-all flex flex-col items-center gap-2 ${browserType === 'chrome' ? 'border-blue-500 bg-blue-50/70 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300' : 'border-slate-200/90 dark:border-slate-600/40 hover:border-blue-300 bg-white/55 dark:bg-slate-900/20'}`}
                                 >
                                     <span className="font-semibold">Chrome / Edge</span>
                                 </button>
                                 <button 
                                     onClick={() => setBrowserType('firefox')}
-                                    className={`p-4 rounded-xl border-2 transition-all flex flex-col items-center gap-2 ${browserType === 'firefox' ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300' : 'border-slate-200 dark:border-slate-700 hover:border-blue-300 bg-white dark:bg-slate-800'}`}
+                                    className={`p-4 rounded-xl border-2 transition-all flex flex-col items-center gap-2 ${browserType === 'firefox' ? 'border-blue-500 bg-blue-50/70 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300' : 'border-slate-200/90 dark:border-slate-600/40 hover:border-blue-300 bg-white/55 dark:bg-slate-900/20'}`}
                                 >
                                     <span className="font-semibold">Mozilla Firefox</span>
                                 </button>
@@ -1060,7 +981,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 配置步骤与代码
                             </h4>
                             
-                            <div className="bg-slate-50 dark:bg-slate-800/50 p-5 rounded-xl border border-slate-200 dark:border-slate-700">
+                            <div className="liquid-section p-5 rounded-2xl">
                                 <h5 className="font-semibold text-sm mb-3 dark:text-slate-200">
                                     安装指南 ({browserType === 'chrome' ? 'Chrome/Edge' : 'Firefox'}):
                                 </h5>
@@ -1109,9 +1030,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 </div>
                             </div>
 
-                            <div className="p-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl flex items-center justify-between">
+                            <div className="liquid-section p-4 rounded-2xl flex items-center justify-between">
                                 <div className="flex items-center gap-4">
-                                     <div className="w-12 h-12 rounded-lg bg-slate-100 dark:bg-slate-700 flex items-center justify-center overflow-hidden border border-slate-200 dark:border-slate-600">
+                                     <div className="w-12 h-12 rounded-lg bg-white/70 dark:bg-slate-900/30 flex items-center justify-center overflow-hidden border border-slate-200/90 dark:border-slate-600/40">
                                         {localSiteSettings.favicon ? <img src={localSiteSettings.favicon} className="w-full h-full object-cover"/> : <Globe size={24} className="text-slate-400"/>}
                                     </div>
                                     <div>
@@ -1128,13 +1049,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                             </div>
 
                             <div className="space-y-4">
-                                <div className="flex items-center gap-2 text-sm font-medium text-slate-800 dark:text-slate-200 pt-2 border-t border-slate-100 dark:border-slate-700">
+                                <div className="flex items-center gap-2 text-sm font-medium text-slate-800 dark:text-slate-200 pt-2 border-t liquid-divider">
                                     <Sidebar size={18} className="text-purple-500"/> 核心配置
                                 </div>
                                 {renderCodeBlock('manifest.json', getManifestJson())}
                                 {renderCodeBlock('background.js', extBackgroundJs)}
                                 
-                                <div className="flex items-center gap-2 text-sm font-medium text-slate-800 dark:text-slate-200 pt-2 border-t border-slate-100 dark:border-slate-700">
+                                <div className="flex items-center gap-2 text-sm font-medium text-slate-800 dark:text-slate-200 pt-2 border-t liquid-divider">
                                     <Keyboard size={18} className="text-green-500"/> 侧边栏导航功能 (Sidebar)
                                 </div>
                                 {renderCodeBlock('sidebar.html', extSidebarHtml)}
@@ -1146,7 +1067,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             </div>
 
-            <div className="p-4 border-t border-slate-200 dark:border-slate-700 flex justify-end bg-slate-50 dark:bg-slate-800/50 shrink-0">
+            <div className="p-4 border-t liquid-divider flex justify-end shrink-0">
                 <button 
                     onClick={handleSave}
                     className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium transition-colors shadow-lg shadow-blue-500/20"

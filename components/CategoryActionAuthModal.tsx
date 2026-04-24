@@ -61,9 +61,9 @@ const CategoryActionAuthModal: React.FC<CategoryActionAuthModalProps> = ({
     : 'red';
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden border border-slate-200 dark:border-slate-700 p-6 relative">
-        <button onClick={handleClose} className="absolute top-4 right-4 p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full">
+    <div className="liquid-overlay fixed inset-0 z-[60] flex items-center justify-center p-4">
+      <div className="liquid-panel w-full max-w-sm overflow-hidden rounded-2xl p-6 relative">
+        <button onClick={handleClose} className="absolute top-4 right-4 p-1 hover:bg-white/60 dark:hover:bg-slate-700/70 rounded-full">
             <X size={20} className="text-slate-400" />
         </button>
 
@@ -89,7 +89,7 @@ const CategoryActionAuthModal: React.FC<CategoryActionAuthModalProps> = ({
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className={`w-full p-3 rounded-xl border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white focus:ring-2 focus:ring-${colorClass}-500 outline-none transition-all text-center tracking-widest`}
+              className="liquid-input w-full p-3 rounded-xl dark:text-white outline-none transition-all text-center tracking-widest"
               placeholder="请输入密码"
               autoFocus
               disabled={isVerifying}
