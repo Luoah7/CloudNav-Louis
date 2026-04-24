@@ -1,432 +1,557 @@
-import React, { useMemo, useState } from 'react';
-import { X, ArrowUp, ArrowDown, Trash2, Edit2, Plus, Check, Lock, Palette } from 'lucide-react';
-import { Category } from '../types';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Check, ChevronRight, Edit2, FolderPlus, GripVertical, Lock, Trash2, X } from 'lucide-react';
+import type { Category } from '../types';
 import Icon from './Icon';
-import IconSelector from './IconSelector';
+import CategoryEditorModal from './CategoryEditorModal';
+import CategoryDeleteModal, { type DeleteCategoryOptions } from './CategoryDeleteModal';
 import {
+  buildCategoryTree,
   flattenCategoryTree,
   getDescendantCategoryIds,
   normalizeCategories,
+  type CategoryTreeNode,
 } from '../services/categoryTree';
 
-export type DeleteCategoryOptions =
-  | { mode: 'move'; targetCategoryId: string }
-  | { mode: 'deleteLinks' };
+const ROOT_KEY = '__root__';
+
+type DropPosition = 'before' | 'after' | 'inside' | 'root';
+
+interface DropInstruction {
+  position: DropPosition;
+  targetId?: string;
+}
+
+interface CategoryEditorState {
+  isOpen: boolean;
+  mode: 'create' | 'edit';
+  category?: Category | null;
+  parentId?: string;
+}
+
+export interface ManagedCategoryDeleteAction {
+  categoryId: string;
+  deletedCategoryIds: string[];
+  options: DeleteCategoryOptions;
+}
+
+export interface CategoryManagerSavePayload {
+  categories: Category[];
+  deleteActions: ManagedCategoryDeleteAction[];
+}
 
 interface CategoryManagerModalProps {
   isOpen: boolean;
   onClose: () => void;
   categories: Category[];
-  onUpdateCategories: (newCategories: Category[]) => void;
-  onDeleteCategory: (id: string, options: DeleteCategoryOptions) => void;
+  onSave: (payload: CategoryManagerSavePayload) => void;
 }
+
+const buildExpandedIds = (categories: Category[]) => {
+  const expanded = new Set<string>();
+
+  const visit = (nodes: CategoryTreeNode[]) => {
+    nodes.forEach(node => {
+      if (node.children.length > 0) {
+        expanded.add(node.id);
+        visit(node.children);
+      }
+    });
+  };
+
+  visit(buildCategoryTree(categories));
+  return expanded;
+};
+
+const serializeCategories = (categories: Category[]) => JSON.stringify(
+  normalizeCategories(categories).map(category => ({
+    id: category.id,
+    name: category.name,
+    icon: category.icon,
+    password: category.password || '',
+    parentId: category.parentId || '',
+    order: category.order || 0,
+  }))
+);
 
 const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
   isOpen,
   onClose,
   categories,
-  onUpdateCategories,
-  onDeleteCategory,
+  onSave,
 }) => {
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editName, setEditName] = useState('');
-  const [editPassword, setEditPassword] = useState('');
-  const [editIcon, setEditIcon] = useState('');
-  const [editParentId, setEditParentId] = useState('');
+  const [draftCategories, setDraftCategories] = useState<Category[]>([]);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [editorState, setEditorState] = useState<CategoryEditorState>({ isOpen: false, mode: 'create' });
+  const [deletingCategory, setDeletingCategory] = useState<Category | null>(null);
+  const [pendingDeleteActions, setPendingDeleteActions] = useState<ManagedCategoryDeleteAction[]>([]);
+  const [draggedCategoryId, setDraggedCategoryId] = useState<string | null>(null);
+  const [dropInstruction, setDropInstruction] = useState<DropInstruction | null>(null);
 
-  const [newCatName, setNewCatName] = useState('');
-  const [newCatPassword, setNewCatPassword] = useState('');
-  const [newCatIcon, setNewCatIcon] = useState('Folder');
-  const [newCatParentId, setNewCatParentId] = useState('');
+  const normalizedSourceCategories = useMemo(() => normalizeCategories(categories), [categories]);
+  const sourceSnapshot = useMemo(() => serializeCategories(normalizedSourceCategories), [normalizedSourceCategories]);
+  const categoryTree = useMemo(() => buildCategoryTree(draftCategories).filter(node => node.id !== 'common'), [draftCategories]);
+  const flatCategories = useMemo(() => flattenCategoryTree(draftCategories, { includeCommon: false }), [draftCategories]);
+  const editorParentOptions = useMemo(() => {
+    const excludedIds = new Set<string>(['common']);
+    if (editorState.mode === 'edit' && editorState.category) {
+      getDescendantCategoryIds(draftCategories, editorState.category.id).forEach(id => excludedIds.add(id));
+    }
 
-  const [isIconSelectorOpen, setIsIconSelectorOpen] = useState(false);
-  const [iconSelectorTarget, setIconSelectorTarget] = useState<'edit' | 'new' | null>(null);
+    return flattenCategoryTree(draftCategories, { includeCommon: false, excludeIds: excludedIds }).map(({ category, path }) => ({
+      id: category.id,
+      path,
+    }));
+  }, [draftCategories, editorState]);
 
-  const [pendingDelete, setPendingDelete] = useState<Category | null>(null);
-  const [deleteMode, setDeleteMode] = useState<'move' | 'deleteLinks'>('move');
-  const [deleteTargetId, setDeleteTargetId] = useState('common');
-
-  const normalizedCategories = useMemo(() => normalizeCategories(categories), [categories]);
-  const flatCategories = useMemo(() => flattenCategoryTree(normalizedCategories), [normalizedCategories]);
+  useEffect(() => {
+    if (!isOpen) return;
+    const normalized = normalizeCategories(categories);
+    setDraftCategories(normalized);
+    setExpandedIds(buildExpandedIds(normalized));
+    setPendingDeleteActions([]);
+    setDeletingCategory(null);
+    setEditorState({ isOpen: false, mode: 'create' });
+    setDraggedCategoryId(null);
+    setDropInstruction(null);
+  }, [categories, isOpen]);
 
   if (!isOpen) return null;
 
-  const siblingItems = (cat: Category) => flatCategories.filter(item => item.category.parentId === cat.parentId);
-  const canMove = (cat: Category, direction: 'up' | 'down') => {
-    if (cat.id === 'common') return false;
-    const siblings = siblingItems(cat);
-    const index = siblings.findIndex(item => item.category.id === cat.id);
-    return direction === 'up' ? index > 0 : index >= 0 && index < siblings.length - 1;
-  };
+  const draftSnapshot = serializeCategories(draftCategories);
+  const hasUnsavedChanges = draftSnapshot !== sourceSnapshot || pendingDeleteActions.length > 0;
 
-  const handleMove = (cat: Category, direction: 'up' | 'down') => {
-    const siblings = siblingItems(cat);
-    const siblingIndex = siblings.findIndex(item => item.category.id === cat.id);
-    const targetSibling = direction === 'up' ? siblings[siblingIndex - 1] : siblings[siblingIndex + 1];
-    if (!targetSibling) return;
-
-    const newCats = [...normalizedCategories];
-    const currentIndex = newCats.findIndex(item => item.id === cat.id);
-    const targetIndex = newCats.findIndex(item => item.id === targetSibling.category.id);
-    if (currentIndex === -1 || targetIndex === -1) return;
-
-    [newCats[currentIndex], newCats[targetIndex]] = [newCats[targetIndex], newCats[currentIndex]];
-    onUpdateCategories(newCats);
-  };
-
-  const startEdit = (cat: Category) => {
-    setEditingId(cat.id);
-    setEditName(cat.name);
-    setEditPassword(cat.password || '');
-    setEditIcon(cat.icon);
-    setEditParentId(cat.parentId || '');
-  };
-
-  const handleStartEdit = (cat: Category) => {
-    startEdit(cat);
-  };
-
-  const parentOptions = (editingCategoryId?: string) => {
-    const excludedIds = new Set<string>(['common']);
-    if (editingCategoryId) {
-      getDescendantCategoryIds(normalizedCategories, editingCategoryId).forEach(id => excludedIds.add(id));
-    }
-    return flatCategories.filter(({ category }) => !excludedIds.has(category.id));
-  };
-
-  const saveEdit = () => {
-    if (!editingId || !editName.trim()) return;
-    const invalidParentIds = new Set(getDescendantCategoryIds(normalizedCategories, editingId));
-    if (editParentId && invalidParentIds.has(editParentId)) {
-      alert('不能把分类移动到自己或自己的子分类下');
+  const closeWithGuard = () => {
+    if (hasUnsavedChanges && !window.confirm('目录管理中有未保存的更改，确认放弃吗？')) {
       return;
     }
-
-    const newCats = normalizedCategories.map(c => c.id === editingId ? {
-      ...c,
-      name: editName.trim(),
-      icon: editIcon,
-      password: editPassword.trim() || undefined,
-      parentId: editParentId || undefined,
-    } : c);
-    onUpdateCategories(newCats);
-    setEditingId(null);
+    onClose();
   };
 
-  const handleAdd = () => {
-    if (!newCatName.trim()) return;
-    const newCat: Category = {
-      id: Date.now().toString(),
-      name: newCatName.trim(),
-      icon: newCatIcon,
-      password: newCatPassword.trim() || undefined,
-      parentId: newCatParentId || undefined,
+  const toggleExpanded = (categoryId: string) => {
+    setExpandedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(categoryId)) {
+        next.delete(categoryId);
+      } else {
+        next.add(categoryId);
+      }
+      return next;
+    });
+  };
+
+  const openCreateCategory = (parentId?: string) => {
+    setEditorState({ isOpen: true, mode: 'create', parentId });
+    if (parentId) {
+      setExpandedIds(prev => new Set(prev).add(parentId));
+    }
+  };
+
+  const openEditCategory = (category: Category) => {
+    if (category.id === 'common') return;
+    setEditorState({ isOpen: true, mode: 'edit', category });
+  };
+
+  const closeEditor = () => {
+    setEditorState({ isOpen: false, mode: 'create' });
+  };
+
+  const handleSaveCategory = (data: { name: string; icon: string; password?: string; parentId?: string }) => {
+    setDraftCategories(prev => {
+      if (editorState.mode === 'edit' && editorState.category) {
+        return normalizeCategories(prev.map(category => (
+          category.id === editorState.category?.id
+            ? {
+                ...category,
+                ...data,
+                order: category.parentId !== data.parentId ? undefined : category.order,
+              }
+            : category
+        )));
+      }
+
+      const newCategory: Category = {
+        id: `cat_${Date.now()}`,
+        name: data.name,
+        icon: data.icon,
+        password: data.password,
+        parentId: data.parentId,
+      };
+
+      return normalizeCategories([...prev, newCategory]);
+    });
+
+    if (data.parentId) {
+      setExpandedIds(prev => new Set(prev).add(data.parentId!));
+    }
+
+    closeEditor();
+  };
+
+  const handleConfirmDelete = (categoryId: string, options: DeleteCategoryOptions) => {
+    const deletedCategoryIds = getDescendantCategoryIds(draftCategories, categoryId);
+    const deletedIdSet = new Set(deletedCategoryIds);
+
+    setDraftCategories(prev => normalizeCategories(prev.filter(category => !deletedIdSet.has(category.id))));
+    setPendingDeleteActions(prev => {
+      const remaining = prev.filter(action => !action.deletedCategoryIds.some(id => deletedIdSet.has(id)));
+      return [...remaining, { categoryId, deletedCategoryIds, options }];
+    });
+    setDeletingCategory(null);
+  };
+
+  const createOrderedChildrenMap = (sourceCategories: Category[]) => {
+    const orderedChildren = new Map<string, string[]>();
+
+    const visit = (nodes: CategoryTreeNode[], parentId?: string) => {
+      const parentKey = parentId || ROOT_KEY;
+      orderedChildren.set(
+        parentKey,
+        nodes
+          .filter(node => !(parentId === undefined && node.id === 'common'))
+          .map(node => node.id)
+      );
+
+      nodes.forEach(node => visit(node.children, node.id));
     };
 
-    onUpdateCategories([...normalizedCategories, newCat]);
-    setNewCatName('');
-    setNewCatPassword('');
-    setNewCatIcon('Folder');
-    setNewCatParentId('');
+    visit(buildCategoryTree(sourceCategories));
+    return orderedChildren;
   };
 
-  const handleDeleteClick = (cat: Category) => {
-    const deletingIds = new Set(getDescendantCategoryIds(normalizedCategories, cat.id));
-    const firstTarget = flatCategories.find(({ category }) => !deletingIds.has(category.id))?.category.id || 'common';
-    setPendingDelete(cat);
-    setDeleteMode('move');
-    setDeleteTargetId(firstTarget);
-  };
+  const moveCategory = (instruction: DropInstruction) => {
+    if (!draggedCategoryId) return;
 
-  const confirmDelete = () => {
-    if (!pendingDelete) return;
-    if (deleteMode === 'move') {
-      if (!deleteTargetId) {
-        alert('请选择迁移目标分类');
-        return;
+    setDraftCategories(prev => {
+      const normalized = normalizeCategories(prev);
+      const categoryMap = new Map(normalized.map(category => [category.id, { ...category }]));
+      const dragged = categoryMap.get(draggedCategoryId);
+      if (!dragged || dragged.id === 'common') return prev;
+
+      if (instruction.targetId) {
+        const invalidTargetIds = new Set(getDescendantCategoryIds(normalized, draggedCategoryId));
+        if (invalidTargetIds.has(instruction.targetId)) {
+          return prev;
+        }
       }
-      onDeleteCategory(pendingDelete.id, { mode: 'move', targetCategoryId: deleteTargetId });
-    } else {
-      onDeleteCategory(pendingDelete.id, { mode: 'deleteLinks' });
+
+      const orderedChildren = createOrderedChildrenMap(normalized);
+      const getOrderedChildren = (parentId?: string) => [...(orderedChildren.get(parentId || ROOT_KEY) || [])];
+      const oldParentId = dragged.parentId;
+      const oldParentKey = oldParentId || ROOT_KEY;
+      const oldSiblingIds = getOrderedChildren(oldParentId).filter(id => id !== draggedCategoryId);
+
+      let newParentId: string | undefined;
+      let newSiblingIds: string[];
+
+      if (instruction.position === 'root') {
+        newParentId = undefined;
+        newSiblingIds = [...getOrderedChildren(undefined).filter(id => id !== draggedCategoryId), draggedCategoryId];
+      } else {
+        const target = instruction.targetId ? categoryMap.get(instruction.targetId) : undefined;
+        if (!target) return prev;
+
+        if (instruction.position === 'inside') {
+          newParentId = target.id;
+          newSiblingIds = [...getOrderedChildren(target.id).filter(id => id !== draggedCategoryId), draggedCategoryId];
+        } else {
+          newParentId = target.parentId;
+          newSiblingIds = getOrderedChildren(newParentId).filter(id => id !== draggedCategoryId);
+          const targetIndex = newSiblingIds.indexOf(target.id);
+          if (targetIndex === -1) return prev;
+          const insertIndex = instruction.position === 'before' ? targetIndex : targetIndex + 1;
+          newSiblingIds.splice(insertIndex, 0, draggedCategoryId);
+        }
+      }
+
+      dragged.parentId = newParentId;
+      if (!newParentId) {
+        delete dragged.parentId;
+      }
+
+      const applyOrders = (parentId: string | undefined, siblingIds: string[]) => {
+        siblingIds.forEach((id, index) => {
+          const category = categoryMap.get(id);
+          if (!category) return;
+          category.order = index + 1;
+        });
+      };
+
+      if ((newParentId || ROOT_KEY) === oldParentKey) {
+        applyOrders(newParentId, newSiblingIds);
+      } else {
+        applyOrders(oldParentId, oldSiblingIds);
+        applyOrders(newParentId, newSiblingIds);
+      }
+
+      const commonCategory = categoryMap.get('common');
+      if (commonCategory) {
+        commonCategory.order = 0;
+      }
+
+      return normalizeCategories(Array.from(categoryMap.values()));
+    });
+
+    setDraggedCategoryId(null);
+    setDropInstruction(null);
+  };
+
+  const handleRowDragOver = (event: React.DragEvent<HTMLDivElement>, categoryId: string) => {
+    if (!draggedCategoryId || draggedCategoryId === categoryId) return;
+    const invalidTargetIds = new Set(getDescendantCategoryIds(draftCategories, draggedCategoryId));
+    if (invalidTargetIds.has(categoryId)) return;
+
+    event.preventDefault();
+    const rect = event.currentTarget.getBoundingClientRect();
+    const offsetY = event.clientY - rect.top;
+    const ratio = rect.height ? offsetY / rect.height : 0;
+
+    let position: DropPosition = 'inside';
+    if (ratio < 0.25) {
+      position = 'before';
+    } else if (ratio > 0.75) {
+      position = 'after';
     }
-    setPendingDelete(null);
+
+    setDropInstruction({ targetId: categoryId, position });
   };
 
-  const openIconSelector = (target: 'edit' | 'new') => {
-    setIconSelectorTarget(target);
-    setIsIconSelectorOpen(true);
+  const handleRootDragOver = (event: React.DragEvent<HTMLDivElement>) => {
+    if (!draggedCategoryId) return;
+    event.preventDefault();
+    setDropInstruction({ position: 'root' });
   };
 
-  const handleIconSelect = (iconName: string) => {
-    if (iconSelectorTarget === 'edit') {
-      setEditIcon(iconName);
-    } else if (iconSelectorTarget === 'new') {
-      setNewCatIcon(iconName);
-    }
+  const handleDragEnd = () => {
+    setDraggedCategoryId(null);
+    setDropInstruction(null);
   };
 
-  const cancelIconSelector = () => {
-    setIsIconSelectorOpen(false);
-    setIconSelectorTarget(null);
-  };
+  const renderRows = (nodes: CategoryTreeNode[], depth = 0): React.ReactNode => (
+    nodes.map(node => {
+      const hasChildren = node.children.length > 0;
+      const isExpanded = expandedIds.has(node.id);
+      const isDragging = draggedCategoryId === node.id;
+      const isDropTarget = dropInstruction?.targetId === node.id;
+      const showDropBefore = isDropTarget && dropInstruction?.position === 'before';
+      const showDropAfter = isDropTarget && dropInstruction?.position === 'after';
+      const showDropInside = isDropTarget && dropInstruction?.position === 'inside';
 
-  const deleteTargetOptions = pendingDelete
-    ? flatCategories.filter(({ category }) => !getDescendantCategoryIds(normalizedCategories, pendingDelete.id).includes(category.id))
-    : [];
+      return (
+        <div key={node.id} className="space-y-1">
+          <div
+            className={`relative rounded-xl border transition-colors ${
+              isDragging
+                ? 'border-blue-400 bg-blue-50/80 opacity-70 dark:border-blue-500/40 dark:bg-blue-500/10'
+                : 'liquid-section'
+            } ${showDropInside ? 'border-blue-500 ring-2 ring-blue-500/20' : ''}`}
+            style={{ marginLeft: depth * 16 }}
+          >
+            {showDropBefore && <div className="absolute left-10 right-4 top-0 h-0.5 rounded-full bg-blue-500" />}
+            {showDropAfter && <div className="absolute bottom-0 left-10 right-4 h-0.5 rounded-full bg-blue-500" />}
 
-  return (
-    <div className="liquid-overlay fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="liquid-panel w-full max-w-2xl overflow-hidden rounded-2xl flex flex-col max-h-[85vh]">
-        <div className="flex justify-between items-center p-4 border-b liquid-divider">
-          <h3 className="text-lg font-semibold dark:text-white">分类管理</h3>
-          <button onClick={onClose} className="p-1 hover:bg-white/60 dark:hover:bg-slate-700/70 rounded-full transition-colors">
-            <X className="w-5 h-5 dark:text-slate-400" />
-          </button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-4 space-y-2">
-          {flatCategories.map(({ category: cat, depth, path }) => (
-            <div key={cat.id} className="liquid-section flex flex-col p-3 rounded-xl group gap-2">
-              <div className="flex items-center gap-2">
-                <div className="flex flex-col gap-1 mr-2">
-                  <button
-                    onClick={() => handleMove(cat, 'up')}
-                    disabled={!canMove(cat, 'up')}
-                    className="p-0.5 text-slate-400 hover:text-blue-500 disabled:opacity-30"
-                  >
-                    <ArrowUp size={14} />
-                  </button>
-                  <button
-                    onClick={() => handleMove(cat, 'down')}
-                    disabled={!canMove(cat, 'down')}
-                    className="p-0.5 text-slate-400 hover:text-blue-500 disabled:opacity-30"
-                  >
-                    <ArrowDown size={14} />
-                  </button>
-                </div>
-
-                <div className="flex items-center gap-2 flex-1 min-w-0">
-                  {editingId === cat.id && cat.id !== 'common' ? (
-                    <div className="flex flex-col gap-2 flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <Icon name={editIcon} size={16} />
-                        <input
-                          type="text"
-                          value={editName}
-                          onChange={(e) => setEditName(e.target.value)}
-                          className="liquid-input flex-1 p-1.5 px-2 text-sm rounded dark:text-white outline-none"
-                          placeholder="分类名称"
-                          autoFocus
-                        />
-                        <button
-                          type="button"
-                          className="p-1 text-slate-400 hover:text-blue-600 transition-colors"
-                          onClick={() => openIconSelector('edit')}
-                          title="选择图标"
-                        >
-                          <Palette size={16} />
-                        </button>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Lock size={14} className="text-slate-400" />
-                        <input
-                          type="password"
-                          value={editPassword}
-                          onChange={(e) => setEditPassword(e.target.value)}
-                          className="liquid-input flex-1 p-1.5 px-2 text-sm rounded dark:text-white outline-none"
-                          placeholder="密码（可选）"
-                        />
-                      </div>
-                      <select
-                        value={editParentId}
-                        onChange={(e) => setEditParentId(e.target.value)}
-                        className="liquid-input p-1.5 px-2 text-sm rounded dark:text-white outline-none"
-                      >
-                        <option value="">一级分类</option>
-                        {parentOptions(cat.id).map(({ category, path }) => (
-                          <option key={category.id} value={category.id}>{path}</option>
-                        ))}
-                      </select>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2 min-w-0" style={{ paddingLeft: depth * 14 }}>
-                      <Icon name={cat.icon} size={16} />
-                      <span className="font-medium dark:text-slate-200 truncate" title={path}>
-                        {cat.name}
-                        {cat.id === 'common' && (
-                          <span className="ml-2 text-xs text-slate-400">(默认分类，不可编辑)</span>
-                        )}
-                      </span>
-                      {cat.password && <Lock size={12} className="text-slate-400" />}
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-1 self-start mt-1">
-                  {editingId === cat.id ? (
-                    <button onClick={saveEdit} className="text-green-500 hover:bg-green-50 dark:hover:bg-slate-600 p-1.5 rounded bg-white/60 dark:bg-slate-800/70 shadow-sm border border-white/70 dark:border-slate-600">
-                      <Check size={16} />
-                    </button>
-                  ) : (
-                    <>
-                      {cat.id !== 'common' && (
-                        <button onClick={() => handleStartEdit(cat)} className="p-1.5 text-slate-400 hover:text-blue-500 hover:bg-slate-200 dark:hover:bg-slate-600 rounded">
-                          <Edit2 size={14} />
-                        </button>
-                      )}
-                      {cat.id !== 'common' && (
-                        <button
-                          onClick={() => handleDeleteClick(cat)}
-                          className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-slate-200 dark:hover:bg-slate-600 rounded"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      )}
-                      {cat.id === 'common' && (
-                        <div className="p-1.5 text-slate-300" title="常用推荐分类不能被删除">
-                          <Lock size={14} />
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <div className="p-4 border-t liquid-divider bg-white/25 dark:bg-slate-900/20">
-          <label className="text-xs font-semibold text-slate-500 uppercase mb-2 block">添加新分类</label>
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center gap-2">
-              <Icon name={newCatIcon} size={16} />
-              <input
-                type="text"
-                value={newCatName}
-                onChange={(e) => setNewCatName(e.target.value)}
-                placeholder="分类名称"
-                className="liquid-input flex-1 p-2 rounded-lg dark:text-white text-sm outline-none"
-              />
+            <div
+              className="flex items-center gap-2 p-3"
+              onDragOver={(event) => handleRowDragOver(event, node.id)}
+              onDrop={(event) => {
+                event.preventDefault();
+                if (dropInstruction?.targetId === node.id) {
+                  moveCategory(dropInstruction);
+                }
+              }}
+            >
               <button
                 type="button"
-                className="p-1 text-gray-500 hover:text-blue-600 transition-colors"
-                onClick={() => openIconSelector('new')}
-                title="选择图标"
+                onClick={() => hasChildren && toggleExpanded(node.id)}
+                className={`flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition-colors ${
+                  hasChildren ? 'hover:bg-white/70 hover:text-blue-500 dark:hover:bg-white/10' : 'text-transparent'
+                }`}
+                disabled={!hasChildren}
+                aria-label={isExpanded ? '收起目录' : '展开目录'}
               >
-                <Palette size={16} />
+                <ChevronRight size={14} className={isExpanded ? 'rotate-90' : ''} />
               </button>
-            </div>
-            <div className="flex gap-2">
-              <div className="flex-1 relative">
-                <Lock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="text"
-                  value={newCatPassword}
-                  onChange={(e) => setNewCatPassword(e.target.value)}
-                  placeholder="密码 (可选)"
-                  className="liquid-input w-full pl-8 p-2 rounded-lg dark:text-white text-sm outline-none"
-                  onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
-                />
-              </div>
+
               <button
-                onClick={handleAdd}
-                disabled={!newCatName.trim()}
-                className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg transition-colors flex items-center"
+                type="button"
+                draggable
+                onDragStart={(event) => {
+                  event.dataTransfer.effectAllowed = 'move';
+                  setDraggedCategoryId(node.id);
+                }}
+                onDragEnd={handleDragEnd}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-white/70 hover:text-blue-500 dark:hover:bg-white/10"
+                title="拖拽排序或调整上下级"
               >
-                <Plus size={18} />
+                <GripVertical size={15} />
               </button>
+
+              <div className="flex min-w-0 flex-1 items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200/80 bg-white/75 text-blue-500 dark:border-white/10 dark:bg-white/5">
+                  <Icon name={node.icon} size={16} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">
+                      {node.name}
+                    </span>
+                    {node.password && <Lock size={13} className="shrink-0 text-amber-500" />}
+                  </div>
+                  <p className="truncate text-xs text-slate-500 dark:text-slate-400">
+                    {hasChildren ? `${node.children.length} 个子目录` : '叶子目录'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => openCreateCategory(node.id)}
+                  className="rounded-lg p-2 text-slate-400 hover:bg-white/70 hover:text-blue-500 dark:hover:bg-white/10"
+                  title="新增子目录"
+                >
+                  <FolderPlus size={15} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openEditCategory(node)}
+                  className="rounded-lg p-2 text-slate-400 hover:bg-white/70 hover:text-blue-500 dark:hover:bg-white/10"
+                  title="编辑目录"
+                >
+                  <Edit2 size={15} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDeletingCategory(node)}
+                  className="rounded-lg p-2 text-slate-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/20"
+                  title="删除目录"
+                >
+                  <Trash2 size={15} />
+                </button>
+              </div>
             </div>
-            <select
-              value={newCatParentId}
-              onChange={(e) => setNewCatParentId(e.target.value)}
-              className="w-full p-2 rounded-lg border border-slate-300 dark:border-slate-600 dark:bg-slate-700 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-            >
-              <option value="">一级分类</option>
-              {parentOptions().map(({ category, path }) => (
-                <option key={category.id} value={category.id}>{path}</option>
-              ))}
-            </select>
           </div>
 
-          {isIconSelectorOpen && (
-            <div className="liquid-overlay fixed inset-0 z-60 flex items-center justify-center p-4">
-              <div className="liquid-panel rounded-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
-                <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-700">
-                  <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200">选择图标</h3>
-                  <button
-                    type="button"
-                    onClick={cancelIconSelector}
-                    className="p-1 rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-                  >
-                    <X size={20} />
-                  </button>
-                </div>
-                <div className="flex-1 overflow-auto p-4">
-                  <IconSelector
-                    onSelectIcon={(iconName) => {
-                      handleIconSelect(iconName);
-                      setIsIconSelectorOpen(false);
-                      setIconSelectorTarget(null);
-                    }}
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {pendingDelete && (
-            <div className="liquid-overlay fixed inset-0 z-60 flex items-center justify-center p-4">
-              <div className="liquid-panel w-full max-w-md rounded-2xl overflow-hidden">
-                <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-700">
-                  <h4 className="font-semibold text-slate-900 dark:text-white">删除分类</h4>
-                  <button onClick={() => setPendingDelete(null)} className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700">
-                    <X size={18} />
-                  </button>
-                </div>
-                <div className="p-4 space-y-4 text-sm text-slate-600 dark:text-slate-300">
-                  <p>
-                    将删除“<span className="font-medium text-slate-900 dark:text-white">{pendingDelete.name}</span>”及其所有子分类。
-                  </p>
-                  <label className="flex items-start gap-3 p-3 rounded-lg border border-slate-200 dark:border-slate-700 cursor-pointer">
-                    <input type="radio" checked={deleteMode === 'move'} onChange={() => setDeleteMode('move')} className="mt-1" />
-                    <span className="flex-1">
-                      <span className="block font-medium text-slate-800 dark:text-slate-100">迁移书签后删除分类</span>
-                      <span className="block text-xs text-slate-500 mt-1">分类树下的书签会移动到目标分类。</span>
-                    </span>
-                  </label>
-                  {deleteMode === 'move' && (
-                    <select
-                      value={deleteTargetId}
-                      onChange={(e) => setDeleteTargetId(e.target.value)}
-                      className="liquid-input w-full p-2 rounded-lg dark:text-white text-sm outline-none"
-                    >
-                      {deleteTargetOptions.map(({ category, path }) => (
-                        <option key={category.id} value={category.id}>{path}</option>
-                      ))}
-                    </select>
-                  )}
-                  <label className="flex items-start gap-3 p-3 rounded-lg border border-red-200 dark:border-red-900/60 cursor-pointer">
-                    <input type="radio" checked={deleteMode === 'deleteLinks'} onChange={() => setDeleteMode('deleteLinks')} className="mt-1" />
-                    <span className="flex-1">
-                      <span className="block font-medium text-red-600 dark:text-red-400">连同书签一起删除</span>
-                      <span className="block text-xs text-slate-500 mt-1">分类树下的书签会一起删除。</span>
-                    </span>
-                  </label>
-                </div>
-                <div className="flex justify-end gap-2 p-4 border-t liquid-divider">
-                  <button onClick={() => setPendingDelete(null)} className="px-4 py-2 rounded-lg bg-white/55 dark:bg-slate-700/70 text-slate-600 dark:text-slate-300">
-                    取消
-                  </button>
-                  <button onClick={confirmDelete} className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white">
-                    确认删除
-                  </button>
-                </div>
-              </div>
+          {hasChildren && isExpanded && (
+            <div className="space-y-1">
+              {renderRows(node.children, depth + 1)}
             </div>
           )}
         </div>
+      );
+    })
+  );
+
+  return (
+    <>
+      <div className="liquid-overlay fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="liquid-panel flex max-h-[88vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl">
+          <div className="flex items-center justify-between border-b liquid-divider px-5 py-4">
+            <div>
+              <h3 className="text-base font-semibold text-slate-900 dark:text-white">管理目录</h3>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                仅在此处支持目录拖拽排序和上下级调整，保存后才会生效。
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => openCreateCategory()}
+                className="flex items-center gap-2 rounded-xl border border-slate-200/80 bg-white/80 px-3 py-2 text-sm text-slate-600 hover:border-blue-300 hover:text-blue-600 dark:border-white/10 dark:bg-white/5 dark:text-slate-300"
+              >
+                <FolderPlus size={15} />
+                新增一级目录
+              </button>
+              <button
+                type="button"
+                onClick={closeWithGuard}
+                className="rounded-full p-1 text-slate-400 hover:bg-white/60 dark:hover:bg-slate-700/70"
+              >
+                <X size={18} />
+              </button>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto px-5 py-4">
+            {draggedCategoryId && (
+              <div
+                className={`mb-3 rounded-xl border border-dashed px-4 py-3 text-sm transition-colors ${
+                  dropInstruction?.position === 'root'
+                    ? 'border-blue-500 bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-300'
+                    : 'border-slate-200 text-slate-500 dark:border-white/10 dark:text-slate-400'
+                }`}
+                onDragOver={handleRootDragOver}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  moveCategory({ position: 'root' });
+                }}
+              >
+                拖到这里，调整为一级目录
+              </div>
+            )}
+
+            <div className="mb-4 rounded-xl border border-slate-200/80 bg-slate-50/70 px-4 py-3 text-xs text-slate-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-400">
+              拖到条目上边缘或下边缘可调整同级顺序，拖到条目中间可移入其下作为子目录。
+            </div>
+
+            {categoryTree.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-slate-200 px-4 py-10 text-center text-sm text-slate-400 dark:border-white/10">
+                还没有可管理的目录
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {renderRows(categoryTree)}
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center justify-between border-t liquid-divider px-5 py-4">
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              {hasUnsavedChanges ? '存在未保存的目录变更' : '当前没有未保存的变更'}
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={closeWithGuard}
+                className="rounded-xl bg-white/55 px-4 py-2 text-sm text-slate-600 hover:bg-white/80 dark:bg-slate-700/60 dark:text-slate-300"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={() => onSave({ categories: draftCategories, deleteActions: pendingDeleteActions })}
+                className="flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+              >
+                <Check size={15} />
+                保存
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
-    </div>
+
+      <CategoryEditorModal
+        isOpen={editorState.isOpen}
+        mode={editorState.mode}
+        category={editorState.category}
+        parentId={editorState.parentId}
+        parentName={
+          editorState.parentId
+            ? flatCategories.find(item => item.category.id === editorState.parentId)?.path
+            : undefined
+        }
+        parentOptions={editorParentOptions}
+        onClose={closeEditor}
+        onSave={handleSaveCategory}
+      />
+
+      <CategoryDeleteModal
+        isOpen={!!deletingCategory}
+        category={deletingCategory}
+        categories={draftCategories}
+        onClose={() => setDeletingCategory(null)}
+        onConfirm={handleConfirmDelete}
+      />
+    </>
   );
 };
 

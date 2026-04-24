@@ -44,6 +44,7 @@ import AuthModal from './components/AuthModal';
 import CategoryEditorModal from './components/CategoryEditorModal';
 import CategoryDeleteModal from './components/CategoryDeleteModal';
 import type { DeleteCategoryOptions } from './components/CategoryDeleteModal';
+import CategoryManagerModal, { type CategoryManagerSavePayload } from './components/CategoryManagerModal';
 import BackupModal from './components/BackupModal';
 import CategoryAuthModal from './components/CategoryAuthModal';
 import ImportModal from './components/ImportModal';
@@ -158,6 +159,8 @@ function App() {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isSearchConfigModalOpen, setIsSearchConfigModalOpen] = useState(false);
+  const [isCategoryManagerOpen, setIsCategoryManagerOpen] = useState(false);
+  const [pendingCategoryManagerSave, setPendingCategoryManagerSave] = useState<CategoryManagerSavePayload | null>(null);
   const [catAuthModalData, setCatAuthModalData] = useState<Category | null>(null);
   const [categoryEditor, setCategoryEditor] = useState<{
     isOpen: boolean;
@@ -864,6 +867,11 @@ function App() {
             localStorage.setItem(AUTH_KEY, password);
             setIsAuthOpen(false);
             setSyncStatus('saved');
+            const pendingManagerSave = pendingCategoryManagerSave;
+            if (pendingManagerSave) {
+              setPendingCategoryManagerSave(null);
+              applyCategoryManagerSave(pendingManagerSave);
+            }
 
             // 登录成功后，获取网站配置（包括密码过期时间设置）
             try {
@@ -1211,6 +1219,10 @@ function App() {
       setCategoryEditor({ isOpen: true, mode: 'create', parentId });
   };
 
+  const openCategoryManager = () => {
+      setIsCategoryManagerOpen(true);
+  };
+
   const closeContentBlankMenu = () => {
     setContentBlankMenu({
       isOpen: false,
@@ -1282,7 +1294,11 @@ function App() {
 
       if (categoryEditor.mode === 'edit' && categoryEditor.category) {
           const updated = categories.map(cat => cat.id === categoryEditor.category?.id
-            ? { ...cat, ...data, parentId: categoryEditor.category?.parentId }
+            ? {
+                ...cat,
+                ...data,
+                order: cat.parentId !== data.parentId ? undefined : cat.order,
+              }
             : cat
           );
           updateData(links, updated);
@@ -1301,6 +1317,49 @@ function App() {
       }
 
       closeCategoryEditor();
+  };
+
+  const applyCategoryManagerSave = ({ categories: nextCategories, deleteActions }: CategoryManagerSavePayload) => {
+
+      const validCategoryIds = new Set(nextCategories.map(category => category.id));
+      let nextLinks = links;
+      let nextSelectedCategory = selectedCategory;
+
+      deleteActions.forEach(action => {
+          const deletingIds = new Set(action.deletedCategoryIds);
+          if (action.options.mode === 'move') {
+              const targetCategoryId = validCategoryIds.has(action.options.targetCategoryId)
+                ? action.options.targetCategoryId
+                : 'common';
+              nextLinks = nextLinks.map(link => deletingIds.has(link.categoryId)
+                ? { ...link, categoryId: targetCategoryId }
+                : link
+              );
+          } else {
+              nextLinks = nextLinks.filter(link => !deletingIds.has(link.categoryId));
+          }
+
+          if (deletingIds.has(nextSelectedCategory)) {
+              nextSelectedCategory = 'common';
+          }
+      });
+
+      if (nextSelectedCategory !== selectedCategory) {
+          setSelectedCategory(nextSelectedCategory);
+      }
+
+      updateData(nextLinks, nextCategories);
+      setIsCategoryManagerOpen(false);
+  };
+
+  const handleSaveCategoryManager = (payload: CategoryManagerSavePayload) => {
+      if (!authToken) {
+          setPendingCategoryManagerSave(payload);
+          setIsAuthOpen(true);
+          return;
+      }
+
+      applyCategoryManagerSave(payload);
   };
 
   const openDeleteCategory = (category: Category) => {
@@ -1366,11 +1425,6 @@ function App() {
   const handleUnlockCategory = (catId: string) => {
       setUnlockedCategoryIds(prev => new Set(prev).add(catId));
       setSelectedCategory(catId);
-  };
-
-  const handleUpdateCategories = (newCats: Category[]) => {
-      if (!authToken) { setIsAuthOpen(true); return; }
-      updateData(links, newCats);
   };
 
   const handleDeleteCategory = (catId: string, options: DeleteCategoryOptions) => {
@@ -1557,6 +1611,17 @@ function App() {
 
   const categoryTree = useMemo(() => buildCategoryTree(categories), [categories]);
   const flatCategories = useMemo(() => flattenCategoryTree(categories), [categories]);
+  const categoryEditorParentOptions = useMemo(() => {
+    const excludedIds = new Set<string>(['common']);
+    if (categoryEditor.mode === 'edit' && categoryEditor.category) {
+      getDescendantCategoryIds(categories, categoryEditor.category.id).forEach(id => excludedIds.add(id));
+    }
+
+    return flattenCategoryTree(categories, { includeCommon: false, excludeIds: excludedIds }).map(({ category, path }) => ({
+      id: category.id,
+      path,
+    }));
+  }, [categories, categoryEditor]);
   const selectedCategoryIds = useMemo(() => (
     selectedCategory !== 'all' && selectedCategory !== 'common'
       ? new Set(getDescendantCategoryIds(categories, selectedCategory))
@@ -1578,7 +1643,9 @@ function App() {
   const currentChildCategories = useMemo(() => {
     const parentId = selectedCategory === 'all' ? undefined : selectedCategory;
     if (selectedCategory === 'common') return [];
-    return categories.filter(cat => cat.id !== 'common' && cat.parentId === parentId);
+    return categories
+      .filter(cat => cat.id !== 'common' && cat.parentId === parentId)
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   }, [categories, selectedCategory]);
 
   const displayedLinks = useMemo(() => {
@@ -2055,6 +2122,7 @@ function App() {
             ? getCategoryPath(categories, categoryEditor.parentId)
             : undefined
         }
+        parentOptions={categoryEditorParentOptions}
         onClose={closeCategoryEditor}
         onSave={handleSaveCategory}
       />
@@ -2156,6 +2224,13 @@ function App() {
         onSave={(sources, defaultSourceId) => handleSaveSearchConfig(sources, searchMode, defaultSourceId)}
       />
 
+      <CategoryManagerModal
+        isOpen={isCategoryManagerOpen}
+        onClose={() => setIsCategoryManagerOpen(false)}
+        categories={categories}
+        onSave={handleSaveCategoryManager}
+      />
+
       {/* Sidebar Mobile Overlay */}
       {sidebarOpen && (
         <div
@@ -2204,14 +2279,23 @@ function App() {
             </div>
 
             <div className="flex items-center justify-between pt-4 pb-2 px-4">
-               <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">分类目录</span>
-               <button
-                  onClick={() => openCreateCategory()}
-                  className="p-1 text-slate-400 hover:text-blue-500 hover:bg-slate-100 dark:hover:bg-white/5 rounded"
-                  title="新增一级目录"
-               >
-                  <Plus size={14} />
-               </button>
+               <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">目录</span>
+               <div className="flex items-center gap-1">
+                 <button
+                    onClick={openCategoryManager}
+                    className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-blue-500 dark:hover:bg-white/5"
+                    title="管理目录"
+                 >
+                    <GripVertical size={14} />
+                 </button>
+                 <button
+                    onClick={() => openCreateCategory()}
+                    className="rounded p-1 text-slate-400 hover:text-blue-500 hover:bg-slate-100 dark:hover:bg-white/5"
+                    title="新增一级目录"
+                 >
+                    <Plus size={14} />
+                 </button>
+               </div>
             </div>
 
             <div className="space-y-1">

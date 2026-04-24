@@ -65,3 +65,20 @@ test('normalizeCategories keeps common at root and lifts invalid parents', () =>
   assert.equal(normalized.find(cat => cat.id === 'orphan')?.parentId, undefined);
   assert.equal(normalized.find(cat => cat.id === 'self')?.parentId, undefined);
 });
+
+test('buildCategoryTree sorts siblings by stored order', () => {
+  const ordered: Category[] = [
+    { id: 'common', name: '常用推荐', icon: 'Star' },
+    { id: 'dev', name: '开发工具', icon: 'Code', order: 2 },
+    { id: 'design', name: '设计资源', icon: 'Palette', order: 1 },
+    { id: 'backend', name: '后端', icon: 'Folder', parentId: 'dev', order: 2 },
+    { id: 'frontend', name: '前端', icon: 'Folder', parentId: 'dev', order: 1 },
+  ];
+
+  const tree = buildCategoryTree(ordered);
+  const rootIds = tree.map(node => node.id);
+  const devChildren = tree.find(node => node.id === 'dev')?.children.map(node => node.id);
+
+  assert.deepEqual(rootIds, ['common', 'design', 'dev']);
+  assert.deepEqual(devChildren, ['frontend', 'backend']);
+});

@@ -15,7 +15,9 @@ const COMMON_CATEGORY: Category = { id: 'common', name: '常用推荐', icon: 'S
 const categorySort = (a: Category, b: Category) => {
   if (a.id === 'common') return -1;
   if (b.id === 'common') return 1;
-  return 0;
+  const orderDiff = (a.order ?? 0) - (b.order ?? 0);
+  if (orderDiff !== 0) return orderDiff;
+  return a.name.localeCompare(b.name, 'zh-CN');
 };
 
 export const normalizeCategories = (categories: Category[]): Category[] => {
@@ -23,6 +25,7 @@ export const normalizeCategories = (categories: Category[]): Category[] => {
   const hasCommon = source.some(cat => cat.id === 'common');
   const withCommon = hasCommon ? source : [COMMON_CATEGORY, ...source];
   const ids = new Set(withCommon.map(cat => cat.id));
+  const nextSiblingOrder = new Map<string, number>();
 
   const wouldCreateCycle = (categoryId: string, parentId: string | undefined) => {
     let current = parentId;
@@ -44,10 +47,14 @@ export const normalizeCategories = (categories: Category[]): Category[] => {
         parentId && ids.has(parentId) && parentId !== 'common' && !wouldCreateCycle(cat.id, parentId)
           ? parentId
           : undefined;
+      const parentKey = validParentId || '__root__';
+      const fallbackOrder = (nextSiblingOrder.get(parentKey) || 0) + 1;
+      nextSiblingOrder.set(parentKey, fallbackOrder);
 
       const normalized: Category = {
         ...cat,
         parentId: validParentId,
+        order: cat.id === 'common' ? 0 : cat.order ?? fallbackOrder,
       };
 
       if (!normalized.parentId) {

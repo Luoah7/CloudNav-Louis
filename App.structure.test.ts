@@ -7,6 +7,7 @@ const contextMenuSource = readFileSync(new URL('./components/ContextMenu.tsx', i
 const linkModalSource = readFileSync(new URL('./components/LinkModal.tsx', import.meta.url), 'utf8');
 const searchConfigModalSource = readFileSync(new URL('./components/SearchConfigModal.tsx', import.meta.url), 'utf8');
 const settingsModalSource = readFileSync(new URL('./components/SettingsModal.tsx', import.meta.url), 'utf8');
+const categoryManagerSource = readFileSync(new URL('./components/CategoryManagerModal.tsx', import.meta.url), 'utf8');
 const indexSource = readFileSync(new URL('./index.html', import.meta.url), 'utf8');
 const packageSource = readFileSync(new URL('./package.json', import.meta.url), 'utf8');
 const devServerSource = readFileSync(new URL('./scripts/dev-server.mjs', import.meta.url), 'utf8');
@@ -23,9 +24,14 @@ const modalSources = [
   './components/SettingsModal.tsx',
 ].map(path => readFileSync(new URL(path, import.meta.url), 'utf8'));
 
-test('App no longer references the old centralized category manager', () => {
-  assert.equal(appSource.includes('CategoryManagerModal'), false);
-  assert.equal(appSource.includes('isCatManagerOpen'), false);
+test('App exposes a dedicated category manager entry instead of inline sidebar dragging', () => {
+  assert.equal(appSource.includes('CategoryManagerModal'), true);
+  assert.equal(appSource.includes('管理目录'), true);
+  assert.equal(appSource.includes('新增一级目录'), true);
+  assert.equal(appSource.includes('pendingCategoryManagerSave'), true);
+  assert.equal(appSource.includes("setPendingProtectedAction('categoryManager')"), false);
+  assert.equal(appSource.includes('>分类目录<'), false);
+  assert.equal(appSource.includes('>目录<'), true);
 });
 
 test('pin entry points are removed from link UI', () => {
@@ -157,4 +163,13 @@ test('simple link grid leaves room for hover controls', () => {
   assert.equal(appSource.includes('grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8'), false);
   assert.equal(appSource.includes('grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6'), true);
   assert.equal(appSource.includes("isDetailedView ? 'items-center gap-4 pl-6' : 'items-center gap-3 pl-7 pr-12'"), true);
+});
+
+test('editing a category can persist a changed parentId instead of forcing the old parent', () => {
+  assert.equal(appSource.includes('? { ...cat, ...data, parentId: categoryEditor.category?.parentId }'), false);
+  assert.equal(appSource.includes('order: cat.parentId !== data.parentId ? undefined : cat.order'), true);
+});
+
+test('category manager keeps hooks before its closed-state early return', () => {
+  assert.ok(categoryManagerSource.indexOf('const editorParentOptions = useMemo') < categoryManagerSource.indexOf('if (!isOpen) return null'));
 });

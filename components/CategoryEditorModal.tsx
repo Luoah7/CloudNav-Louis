@@ -10,6 +10,7 @@ interface CategoryEditorModalProps {
   category?: Category | null;
   parentId?: string;
   parentName?: string;
+  parentOptions?: Array<{ id: string; path: string }>;
   onClose: () => void;
   onSave: (data: { name: string; icon: string; password?: string; parentId?: string }) => void;
 }
@@ -20,12 +21,14 @@ const CategoryEditorModal: React.FC<CategoryEditorModalProps> = ({
   category,
   parentId,
   parentName,
+  parentOptions = [],
   onClose,
   onSave,
 }) => {
   const [name, setName] = useState('');
   const [icon, setIcon] = useState('Folder');
   const [password, setPassword] = useState('');
+  const [selectedParentId, setSelectedParentId] = useState('');
   const [isIconSelectorOpen, setIsIconSelectorOpen] = useState(false);
 
   useEffect(() => {
@@ -33,7 +36,8 @@ const CategoryEditorModal: React.FC<CategoryEditorModalProps> = ({
     setName(category?.name || '');
     setIcon(category?.icon || 'Folder');
     setPassword(category?.password || '');
-  }, [isOpen, category]);
+    setSelectedParentId(category?.parentId || parentId || '');
+  }, [isOpen, category, parentId]);
 
   if (!isOpen) return null;
 
@@ -45,7 +49,7 @@ const CategoryEditorModal: React.FC<CategoryEditorModalProps> = ({
       name: name.trim(),
       icon,
       password: password.trim() || undefined,
-      parentId: mode === 'edit' ? category?.parentId : parentId,
+      parentId: selectedParentId || undefined,
     });
   };
 
@@ -112,6 +116,22 @@ const CategoryEditorModal: React.FC<CategoryEditorModalProps> = ({
               className="liquid-input w-full rounded-xl px-3 py-2 text-sm outline-none dark:text-white"
               placeholder="留空则不锁定"
             />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-500">上级目录</label>
+            <select
+              value={selectedParentId}
+              onChange={(e) => setSelectedParentId(e.target.value)}
+              className="liquid-input w-full rounded-xl px-3 py-2 text-sm outline-none dark:text-white"
+            >
+              <option value="">一级目录</option>
+              {parentOptions.map(option => (
+                <option key={option.id} value={option.id}>
+                  {option.path}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
 

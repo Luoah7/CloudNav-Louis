@@ -18,6 +18,7 @@ export interface Category {
   icon: string; // Lucide icon name or emoji
   password?: string; // Optional password for category protection
   parentId?: string; // Optional parent for tree categories
+  order?: number; // Stable sibling order inside the tree
 }
 
 export interface SiteSettings {
