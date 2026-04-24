@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, ChevronRight, Edit2, FolderPlus, GripVertical, Lock, Trash2, X } from 'lucide-react';
 import type { Category } from '../types';
 import Icon from './Icon';
@@ -86,6 +86,8 @@ const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
   const [pendingDeleteActions, setPendingDeleteActions] = useState<ManagedCategoryDeleteAction[]>([]);
   const [draggedCategoryId, setDraggedCategoryId] = useState<string | null>(null);
   const [dropInstruction, setDropInstruction] = useState<DropInstruction | null>(null);
+  const draggedCategoryIdRef = useRef<string | null>(null);
+  const dropInstructionRef = useRef<DropInstruction | null>(null);
 
   const normalizedSourceCategories = useMemo(() => normalizeCategories(categories), [categories]);
   const sourceSnapshot = useMemo(() => serializeCategories(normalizedSourceCategories), [normalizedSourceCategories]);
@@ -113,6 +115,8 @@ const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
     setEditorState({ isOpen: false, mode: 'create' });
     setDraggedCategoryId(null);
     setDropInstruction(null);
+    draggedCategoryIdRef.current = null;
+    dropInstructionRef.current = null;
   }, [categories, isOpen]);
 
   if (!isOpen) return null;
@@ -218,17 +222,29 @@ const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
     return orderedChildren;
   };
 
-  const moveCategory = (instruction: DropInstruction) => {
-    if (!draggedCategoryId) return;
+  const updateDropInstruction = (instruction: DropInstruction | null) => {
+    dropInstructionRef.current = instruction;
+    setDropInstruction(instruction);
+  };
+
+  const clearDragState = () => {
+    draggedCategoryIdRef.current = null;
+    dropInstructionRef.current = null;
+    setDraggedCategoryId(null);
+    setDropInstruction(null);
+  };
+
+  const moveCategory = (instruction: DropInstruction, categoryId = draggedCategoryIdRef.current || draggedCategoryId) => {
+    if (!categoryId) return;
 
     setDraftCategories(prev => {
       const normalized = normalizeCategories(prev);
       const categoryMap = new Map(normalized.map(category => [category.id, { ...category }]));
-      const dragged = categoryMap.get(draggedCategoryId);
+      const dragged = categoryMap.get(categoryId);
       if (!dragged || dragged.id === 'common') return prev;
 
       if (instruction.targetId) {
-        const invalidTargetIds = new Set(getDescendantCategoryIds(normalized, draggedCategoryId));
+        const invalidTargetIds = new Set(getDescendantCategoryIds(normalized, categoryId));
         if (invalidTargetIds.has(instruction.targetId)) {
           return prev;
         }
@@ -238,28 +254,28 @@ const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
       const getOrderedChildren = (parentId?: string) => [...(orderedChildren.get(parentId || ROOT_KEY) || [])];
       const oldParentId = dragged.parentId;
       const oldParentKey = oldParentId || ROOT_KEY;
-      const oldSiblingIds = getOrderedChildren(oldParentId).filter(id => id !== draggedCategoryId);
+      const oldSiblingIds = getOrderedChildren(oldParentId).filter(id => id !== categoryId);
 
       let newParentId: string | undefined;
       let newSiblingIds: string[];
 
       if (instruction.position === 'root') {
         newParentId = undefined;
-        newSiblingIds = [...getOrderedChildren(undefined).filter(id => id !== draggedCategoryId), draggedCategoryId];
+        newSiblingIds = [...getOrderedChildren(undefined).filter(id => id !== categoryId), categoryId];
       } else {
         const target = instruction.targetId ? categoryMap.get(instruction.targetId) : undefined;
         if (!target) return prev;
 
         if (instruction.position === 'inside') {
           newParentId = target.id;
-          newSiblingIds = [...getOrderedChildren(target.id).filter(id => id !== draggedCategoryId), draggedCategoryId];
+          newSiblingIds = [...getOrderedChildren(target.id).filter(id => id !== categoryId), categoryId];
         } else {
           newParentId = target.parentId;
-          newSiblingIds = getOrderedChildren(newParentId).filter(id => id !== draggedCategoryId);
+          newSiblingIds = getOrderedChildren(newParentId).filter(id => id !== categoryId);
           const targetIndex = newSiblingIds.indexOf(target.id);
           if (targetIndex === -1) return prev;
           const insertIndex = instruction.position === 'before' ? targetIndex : targetIndex + 1;
-          newSiblingIds.splice(insertIndex, 0, draggedCategoryId);
+          newSiblingIds.splice(insertIndex, 0, categoryId);
         }
       }
 
@@ -291,18 +307,30 @@ const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
       return normalizeCategories(Array.from(categoryMap.values()));
     });
 
-    setDraggedCategoryId(null);
-    setDropInstruction(null);
+    if (instruction.position === 'inside' && instruction.targetId) {
+      setExpandedIds(prev => new Set(prev).add(instruction.targetId!));
+    }
+
+    clearDragState();
   };
 
-  const handleRowDragOver = (event: React.DragEvent<HTMLDivElement>, categoryId: string) => {
-    if (!draggedCategoryId || draggedCategoryId === categoryId) return;
-    const invalidTargetIds = new Set(getDescendantCategoryIds(draftCategories, draggedCategoryId));
-    if (invalidTargetIds.has(categoryId)) return;
+  const getPointerDropInstruction = (clientX: number, clientY: number, activeCategoryId: string): DropInstruction | null => {
+    const element = document.elementFromPoint(clientX, clientY) as HTMLElement | null;
+    if (!element) return null;
 
-    event.preventDefault();
-    const rect = event.currentTarget.getBoundingClientRect();
-    const offsetY = event.clientY - rect.top;
+    if (element.closest('[data-category-root-drop="true"]')) {
+      return { position: 'root' };
+    }
+
+    const row = element.closest('[data-category-drop-id]') as HTMLElement | null;
+    const categoryId = row?.dataset.categoryDropId;
+    if (!row || !categoryId || activeCategoryId === categoryId) return null;
+
+    const invalidTargetIds = new Set(getDescendantCategoryIds(draftCategories, activeCategoryId));
+    if (invalidTargetIds.has(categoryId)) return null;
+
+    const rect = row.getBoundingClientRect();
+    const offsetY = clientY - rect.top;
     const ratio = rect.height ? offsetY / rect.height : 0;
 
     let position: DropPosition = 'inside';
@@ -312,18 +340,50 @@ const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
       position = 'after';
     }
 
-    setDropInstruction({ targetId: categoryId, position });
+    return { targetId: categoryId, position };
   };
 
-  const handleRootDragOver = (event: React.DragEvent<HTMLDivElement>) => {
-    if (!draggedCategoryId) return;
+  const startPointerDrag = (categoryId: string, event: React.PointerEvent<HTMLButtonElement>) => {
+    if (event.button !== 0) return;
+
     event.preventDefault();
-    setDropInstruction({ position: 'root' });
-  };
+    event.stopPropagation();
 
-  const handleDragEnd = () => {
-    setDraggedCategoryId(null);
-    setDropInstruction(null);
+    draggedCategoryIdRef.current = categoryId;
+    setDraggedCategoryId(categoryId);
+    updateDropInstruction(null);
+
+    const previousUserSelect = document.body.style.userSelect;
+    document.body.style.userSelect = 'none';
+
+    const cleanup = () => {
+      document.body.style.userSelect = previousUserSelect;
+      document.removeEventListener('pointermove', handlePointerMove);
+      document.removeEventListener('pointerup', handlePointerUp);
+      document.removeEventListener('pointercancel', handlePointerCancel);
+    };
+
+    const finish = (shouldMove: boolean) => {
+      cleanup();
+      const instruction = dropInstructionRef.current;
+      if (shouldMove && instruction) {
+        moveCategory(instruction, categoryId);
+        return;
+      }
+      clearDragState();
+    };
+
+    const handlePointerMove = (pointerEvent: PointerEvent) => {
+      pointerEvent.preventDefault();
+      updateDropInstruction(getPointerDropInstruction(pointerEvent.clientX, pointerEvent.clientY, categoryId));
+    };
+
+    const handlePointerUp = () => finish(true);
+    const handlePointerCancel = () => finish(false);
+
+    document.addEventListener('pointermove', handlePointerMove, { passive: false });
+    document.addEventListener('pointerup', handlePointerUp);
+    document.addEventListener('pointercancel', handlePointerCancel);
   };
 
   const renderRows = (nodes: CategoryTreeNode[], depth = 0): React.ReactNode => (
@@ -339,6 +399,7 @@ const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
       return (
         <div key={node.id} className="space-y-1">
           <div
+            data-category-drop-id={node.id}
             className={`relative rounded-xl border transition-colors ${
               isDragging
                 ? 'border-blue-400 bg-blue-50/80 opacity-70 dark:border-blue-500/40 dark:bg-blue-500/10'
@@ -351,13 +412,6 @@ const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
 
             <div
               className="flex items-center gap-2 p-3"
-              onDragOver={(event) => handleRowDragOver(event, node.id)}
-              onDrop={(event) => {
-                event.preventDefault();
-                if (dropInstruction?.targetId === node.id) {
-                  moveCategory(dropInstruction);
-                }
-              }}
             >
               <button
                 type="button"
@@ -373,13 +427,9 @@ const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
 
               <button
                 type="button"
-                draggable
-                onDragStart={(event) => {
-                  event.dataTransfer.effectAllowed = 'move';
-                  setDraggedCategoryId(node.id);
-                }}
-                onDragEnd={handleDragEnd}
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-white/70 hover:text-blue-500 dark:hover:bg-white/10"
+                onPointerDown={(event) => startPointerDrag(node.id, event)}
+                className="flex h-9 w-9 cursor-grab items-center justify-center rounded-lg text-slate-400 hover:bg-white/70 hover:text-blue-500 active:cursor-grabbing dark:hover:bg-white/10"
+                aria-label="拖拽排序或调整上下级"
                 title="拖拽排序或调整上下级"
               >
                 <GripVertical size={15} />
@@ -474,23 +524,19 @@ const CategoryManagerModal: React.FC<CategoryManagerModalProps> = ({
           <div className="flex-1 overflow-y-auto px-5 py-4">
             {draggedCategoryId && (
               <div
+                data-category-root-drop="true"
                 className={`mb-3 rounded-xl border border-dashed px-4 py-3 text-sm transition-colors ${
                   dropInstruction?.position === 'root'
                     ? 'border-blue-500 bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-300'
                     : 'border-slate-200 text-slate-500 dark:border-white/10 dark:text-slate-400'
                 }`}
-                onDragOver={handleRootDragOver}
-                onDrop={(event) => {
-                  event.preventDefault();
-                  moveCategory({ position: 'root' });
-                }}
               >
                 拖到这里，调整为一级目录
               </div>
             )}
 
             <div className="mb-4 rounded-xl border border-slate-200/80 bg-slate-50/70 px-4 py-3 text-xs text-slate-500 dark:border-white/10 dark:bg-white/5 dark:text-slate-400">
-              拖到条目上边缘或下边缘可调整同级顺序，拖到条目中间可移入其下作为子目录。
+              按住左侧拖拽点移动目录；移到条目上边缘或下边缘调整同级顺序，移到中间可作为子目录。
             </div>
 
             {categoryTree.length === 0 ? (

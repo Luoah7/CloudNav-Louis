@@ -173,3 +173,11 @@ test('editing a category can persist a changed parentId instead of forcing the o
 test('category manager keeps hooks before its closed-state early return', () => {
   assert.ok(categoryManagerSource.indexOf('const editorParentOptions = useMemo') < categoryManagerSource.indexOf('if (!isOpen) return null'));
 });
+
+test('category manager uses pointer drag tracking instead of native html dragging', () => {
+  assert.equal(categoryManagerSource.includes('onPointerDown'), true);
+  assert.equal(categoryManagerSource.includes('data-category-drop-id'), true);
+  assert.equal(categoryManagerSource.includes('data-category-root-drop'), true);
+  assert.equal(categoryManagerSource.includes('draggable'), false);
+  assert.equal(categoryManagerSource.includes('dataTransfer'), false);
+});
