@@ -1,5 +1,5 @@
 import React from 'react';
-import * as LucideIcons from 'lucide-react';
+import iconMap from './iconMap';
 
 interface IconProps {
   name: string;
@@ -8,8 +8,7 @@ interface IconProps {
 }
 
 const Icon: React.FC<IconProps> = ({ name, size = 20, className }) => {
-  // @ts-ignore - Dynamic access to Lucide icons
-  const IconComponent = LucideIcons[name] || LucideIcons.Link;
+  const IconComponent = iconMap[name] || iconMap.Link;
   return <IconComponent size={size} className={className} />;
 };
 

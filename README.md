@@ -1,11 +1,18 @@
-# CloudNav Louis v1.8.1
+# CloudNav Louis v1.8.2
 
 **本项目基于 [aabacada/CloudNav-abcd](https://github.com/aabacada/CloudNav-abcd) 持续优化与重构，同时保留对原始项目 [sese972010/CloudNav-](https://github.com/sese972010/CloudNav-) 的致谢。**
 
 当前版本在保留 CloudNav 核心导航体验的基础上，重点补强了分类树、收藏夹兼容、常用推荐、批量操作、搜索交互、主题与整体界面质感，更适合长期自用和继续开发。
 
 ---
-#### 最新版本 v1.8.1 (2026.4.24)
+#### 最新版本 v1.8.2 (2026.4.29) — 性能与架构优化
+- 1、**Tailwind v4 迁移**: 移除 CDN 运行时版本，改用 `@tailwindcss/vite` 构建时生成 CSS，首屏加载减少 ~4MB
+- 2、**Icon 按需引入**: 消除 `lucide-react` 全量导入，改为显式映射 ~115 个图标，tree-shaking 后体积大幅缩小
+- 3、**Modal 懒加载**: 全部 11 个 Modal 组件改为 `React.lazy + Suspense`，首屏不加载弹窗代码
+- 4、**App.tsx 拆分**: 从 2930 行拆分为 8 个 Custom Hooks (useAuth, useTheme, useSearch, useCategoryManagement, useBatchSelection, useSorting, useContextMenu, useSiteSettings)
+- 5、**构建产物优化**: 主 JS 363KB (gzip 108KB)，CSS 68KB (gzip 11KB)，11 个 Modal 独立 chunk 按需加载
+
+#### 版本 v1.8.1 (2026.4.24)
 - 1、分类目录升级为无限层级树形结构，兼容 Chrome / Edge 收藏夹多级文件夹导入导出
 - 2、左侧导航新增独立 `管理目录` 弹窗，支持目录拖拽排序、调整上下级、一级目录编辑和删除
 - 3、主内容区改为文件夹化管理，支持在当前目录内直接新建文件夹、添加书签、编辑和删除
